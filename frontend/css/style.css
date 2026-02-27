@@ -1,0 +1,206 @@
+/* Main Styles */
+:root {
+    --primary-color: #0d6efd;
+    --success-color: #198754;
+    --danger-color: #dc3545;
+    --warning-color: #ffc107;
+    --info-color: #0dcaf0;
+}
+
+body {
+    background-color: #f8f9fa;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
+
+/* Navigation */
+.navbar {
+    box-shadow: 0 2px 4px rgba(0,0,0,.1);
+}
+
+.navbar-brand {
+    font-weight: 600;
+    font-size: 1.2rem;
+}
+
+/* Cards */
+.card {
+    border: none;
+    border-radius: 10px;
+    box-shadow: 0 4px 6px rgba(0,0,0,.05);
+    margin-bottom: 20px;
+    transition: all 0.3s;
+}
+
+.card:hover {
+    box-shadow: 0 6px 12px rgba(0,0,0,.1);
+}
+
+.card-header {
+    background-color: transparent;
+    border-bottom: 2px solid #f0f0f0;
+    font-weight: 600;
+    padding: 1rem 1.25rem;
+}
+
+/* Stats Cards */
+.stats-card {
+    border-radius: 10px;
+    padding: 20px;
+    transition: all 0.3s;
+}
+
+.stats-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 8px 16px rgba(0,0,0,.2);
+}
+
+.stats-card .card-title {
+    font-size: 0.9rem;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    opacity: 0.9;
+}
+
+.stats-card h2 {
+    font-weight: 700;
+    margin: 10px 0;
+}
+
+/* Module Cards */
+.module-card {
+    height: 100%;
+}
+
+.module-card .list-group-item {
+    border: none;
+    border-bottom: 1px solid #f0f0f0;
+    padding: 1rem;
+}
+
+.module-card .list-group-item:last-child {
+    border-bottom: none;
+}
+
+.module-card .btn {
+    min-width: 70px;
+}
+
+/* Tables */
+.table {
+    margin-bottom: 0;
+}
+
+.table thead th {
+    border-top: none;
+    border-bottom: 2px solid #dee2e6;
+    font-weight: 600;
+    color: #6c757d;
+    text-transform: uppercase;
+    font-size: 0.8rem;
+    letter-spacing: 0.5px;
+}
+
+.table tbody tr {
+    transition: all 0.2s;
+}
+
+.table tbody tr:hover {
+    background-color: rgba(13, 110, 253, 0.05);
+}
+
+/* Badge Styles */
+.badge {
+    padding: 0.5em 0.8em;
+    font-weight: 500;
+    border-radius: 6px;
+}
+
+/* Loading Spinner */
+.loading-spinner {
+    display: inline-block;
+    width: 20px;
+    height: 20px;
+    border: 3px solid rgba(255,255,255,.3);
+    border-radius: 50%;
+    border-top-color: #fff;
+    animation: spin 1s ease-in-out infinite;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
+/* Alert Styles */
+.alert {
+    border-radius: 8px;
+    border: none;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+    .stats-card {
+        margin-bottom: 15px;
+    }
+    
+    .table-responsive {
+        font-size: 0.9rem;
+    }
+    
+    .module-card .btn {
+        min-width: 60px;
+        font-size: 0.8rem;
+    }
+}
+
+/* Status Indicators */
+.status-indicator {
+    display: inline-block;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    margin-right: 5px;
+}
+
+.status-indicator.success {
+    background-color: var(--success-color);
+    box-shadow: 0 0 10px var(--success-color);
+}
+
+.status-indicator.danger {
+    background-color: var(--danger-color);
+    box-shadow: 0 0 10px var(--danger-color);
+}
+
+/* Form Styles */
+.form-control, .form-select {
+    border-radius: 8px;
+    border: 1px solid #dee2e6;
+}
+
+.form-control:focus, .form-select:focus {
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 0.2rem rgba(13, 110, 253, 0.25);
+}
+
+/* Button Styles */
+.btn {
+    border-radius: 8px;
+    font-weight: 500;
+    transition: all 0.2s;
+}
+
+.btn:hover {
+    transform: translateY(-2px);
+}
+
+/* Print Styles */
+@media print {
+    .navbar, .btn, .modal {
+        display: none !important;
+    }
+    
+    .card {
+        box-shadow: none;
+        border: 1px solid #ddd;
+    }
+}

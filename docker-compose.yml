@@ -1,0 +1,175 @@
+version: '3.8'
+
+services:
+  # MongoDB for data storage
+  mongodb:
+    image: mongo:6.0
+    container_name: security-framework-mongodb
+    restart: always
+    ports:
+      - "27017:27017"
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: admin
+      MONGO_INITDB_ROOT_PASSWORD: password123
+      MONGO_INITDB_DATABASE: security_framework
+    volumes:
+      - mongodb_data:/data/db
+    networks:
+      - security-network
+
+  # Elasticsearch for SIEM
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.7.0
+    container_name: security-framework-elasticsearch
+    restart: always
+    environment:
+      - node.name=elasticsearch
+      - cluster.name=docker-cluster
+      - discovery.type=single-node
+      - bootstrap.memory_lock=true
+      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+      - xpack.security.enabled=false
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+    volumes:
+      - elasticsearch_data:/usr/share/elasticsearch/data
+    ports:
+      - "9200:9200"
+    networks:
+      - security-network
+    healthcheck:
+      test: ["CMD-SHELL", "curl -s http://localhost:9200 | grep -q cluster_name"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  # Kibana for visualization
+  kibana:
+    image: docker.elastic.co/kibana/kibana:8.7.0
+    container_name: security-framework-kibana
+    restart: always
+    environment:
+      ELASTICSEARCH_HOSTS: http://elasticsearch:9200
+    ports:
+      - "5601:5601"
+    depends_on:
+      - elasticsearch
+    networks:
+      - security-network
+
+  # Redis for caching
+  redis:
+    image: redis:7-alpine
+    container_name: security-framework-redis
+    restart: always
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - security-network
+
+  # MQTT Broker for IoT simulation
+  mosquitto:
+    image: eclipse-mosquitto:2.0
+    container_name: security-framework-mosquitto
+    restart: always
+    ports:
+      - "1883:1883"
+      - "9001:9001"
+    volumes:
+      - ./mosquitto/config:/mosquitto/config
+      - ./mosquitto/data:/mosquitto/data
+      - ./mosquitto/log:/mosquitto/log
+    networks:
+      - security-network
+
+  # Ganache for blockchain
+  ganache:
+    image: trufflesuite/ganache:latest
+    container_name: security-framework-ganache
+    restart: always
+    command: 
+      - "--deterministic"
+      - "--accounts=10"
+      - "--defaultBalanceEther=1000"
+      - "--hostname=0.0.0.0"
+      - "--port=7545"
+    ports:
+      - "7545:7545"
+    networks:
+      - security-network
+
+  # Python Backend Application
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    container_name: security-framework-backend
+    restart: always
+    ports:
+      - "5000:5000"
+    environment:
+      - FLASK_ENV=development
+      - MONGO_URI=mongodb://admin:password123@mongodb:27017/
+      - REDIS_URL=redis://redis:6379
+      - ELASTICSEARCH_HOST=elasticsearch
+      - ELASTICSEARCH_PORT=9200
+      - GANACHE_URL=http://ganache:7545
+      - MQTT_BROKER=mosquitto
+      - MQTT_PORT=1883
+      - SECRET_KEY=your-secret-key-here
+      - JWT_SECRET=your-jwt-secret-here
+      - TEST_MODE=True
+      - SAFE_MODE=True
+    volumes:
+      - ./backend:/app/backend
+      - ./logs:/app/logs
+      - ./reports:/app/reports
+    depends_on:
+      - mongodb
+      - redis
+      - elasticsearch
+      - ganache
+      - mosquitto
+    networks:
+      - security-network
+
+  # Frontend Nginx
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+    container_name: security-framework-frontend
+    restart: always
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+    networks:
+      - security-network
+
+  # Prometheus for monitoring
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: security-framework-prometheus
+    restart: always
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus_data:/prometheus
+    ports:
+      - "9090:9090"
+    networks:
+      - security-network
+
+networks:
+  security-network:
+    driver: bridge
+
+volumes:
+  mongodb_data:
+  elasticsearch_data:
+  redis_data:
+  prometheus_data:
