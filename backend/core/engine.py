@@ -5,100 +5,110 @@ Core Engine - Orchestrates all framework operations
 import asyncio
 import logging
 from datetime import datetime
-from typing import Dict, Any, List
-from threading import Thread
-from queue import Queue
-import json
+from typing import Dict, List
+import uuid
+import threading
 
-logging.basicConfig(level=logging.INFO)
+from backend.core.module_manager import module_manager
+from backend.core.result_processor import result_processor
+from backend.blockchain.blockchain_auditor import blockchain_auditor
+from backend.siem.log_generator import log_generator
+
 logger = logging.getLogger(__name__)
 
 class SecurityTestingEngine:
-    """Main orchestration engine for security testing"""
-    
+
     def __init__(self):
         self.active_tests = {}
-        self.test_queue = Queue()
-        self.results_cache = {}
-        
-        # Load configuration
-        self.load_configuration()
-        
-    def load_configuration(self):
-        """Load engine configuration"""
-        self.config = {
-            'max_concurrent_tests': 5,
-            'test_timeout': 300,  # seconds
-            'safe_mode': True,
-            'target_validation': True,
-            'log_level': 'INFO',
-            'blockchain_enabled': True,
-            'siem_integration': True
-        }
-        logger.info("Engine configuration loaded")
-        
-    def validate_target(self, target: Dict) -> bool:
-        """Validate target before testing"""
-        target_url = target.get('url', '')
-        safe_domains = ['localhost', '127.0.0.1', 'test.com', 'example.com', 'demo.app', 'vulnerable-app']
-        
-        try:
-            for domain in safe_domains:
-                if domain in target_url:
-                    return True
-            logger.warning(f"Unsafe target rejected: {target_url}")
-            return False
-        except Exception as e:
-            logger.error(f"Target validation error: {str(e)}")
-            return False
-    
+        self.lock = threading.Lock()
+
+    # =============================
+    # TEST SCHEDULING
+    # =============================
+
     def schedule_test(self, test_config: Dict) -> str:
-        """Schedule a new security test"""
-        test_id = self.generate_test_id()
-        
-        # Validate target safety
-        if not self.validate_target(test_config.get('target', {})):
-            raise ValueError("Invalid or unsafe target")
-        
-        # Create test record
+
+        test_id = f"TEST-{uuid.uuid4().hex[:8].upper()}"
+
         test_record = {
             'test_id': test_id,
             'config': test_config,
-            'status': 'queued',
+            'status': 'running',
             'created_at': datetime.now().isoformat(),
-            'started_at': None,
+            'started_at': datetime.now().isoformat(),
             'completed_at': None,
             'results': None,
             'error': None
         }
-        
-        # Add to queue
-        self.test_queue.put(test_id)
-        self.active_tests[test_id] = test_record
-        
-        logger.info(f"Test {test_id} scheduled: {test_config.get('module')}")
-        return test_id
-    
-    def generate_test_id(self) -> str:
-        """Generate unique test ID"""
-        import uuid
-        return f"TEST-{uuid.uuid4().hex[:8].upper()}"
-    
-    def get_test_status(self, test_id: str) -> Dict:
-        """Get status of a test"""
-        return self.active_tests.get(test_id, {})
-    
-    def get_all_tests(self) -> List[Dict]:
-        """Get all tests"""
-        return list(self.active_tests.values())
-    
-    def stop_test(self, test_id: str):
-        """Stop a running test"""
-        if test_id in self.active_tests:
-            self.active_tests[test_id]['status'] = 'stopped'
-            logger.info(f"Test {test_id} stopped")
-            return True
-        return False
 
-# Singleton instance
+        self.active_tests[test_id] = test_record
+
+        # Run test in background thread
+        thread = threading.Thread(
+            target=self._execute_test,
+            args=(test_id, test_config)
+        )
+        thread.start()
+
+        return test_id
+
+    # =============================
+    # EXECUTION PIPELINE
+    # =============================
+
+    def _execute_test(self, test_id: str, config: Dict):
+
+        try:
+            module_group = config.get("module")
+            test_name = config.get("test")
+
+            module_instance = module_manager.get_module(module_group, test_name)
+
+            raw_results = asyncio.run(
+                module_instance.execute(config)
+            )
+
+            raw_results["test_id"] = test_id
+            raw_results["total_tests"] = len(raw_results.get("tests", []))
+
+            processed_results = result_processor.process(raw_results)
+
+            # Blockchain integration
+            if config.get("blockchain", True):
+                evidence_hash = blockchain_auditor.hash_evidence(processed_results)
+
+                tx_hash = blockchain_auditor.store_hash(
+                    evidence_hash,
+                    attack_type=test_name,
+                    target_info=str(config.get("target"))
+                )
+
+                processed_results["blockchain_tx"] = tx_hash
+
+            # SIEM integration
+            if config.get("siem", True):
+                log_generator.generate_security_log(processed_results)
+
+            with self.lock:
+                self.active_tests[test_id]["status"] = "completed"
+                self.active_tests[test_id]["completed_at"] = datetime.now().isoformat()
+                self.active_tests[test_id]["results"] = processed_results
+
+        except Exception as e:
+            logger.error(f"Test execution failed: {str(e)}")
+
+            with self.lock:
+                self.active_tests[test_id]["status"] = "failed"
+                self.active_tests[test_id]["error"] = str(e)
+
+    # =============================
+    # STATUS METHODS
+    # =============================
+
+    def get_test_status(self, test_id: str) -> Dict:
+        return self.active_tests.get(test_id)
+
+    def get_all_tests(self) -> List[Dict]:
+        return list(self.active_tests.values())
+
 engine = SecurityTestingEngine()

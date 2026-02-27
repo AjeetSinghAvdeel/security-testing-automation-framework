@@ -1,66 +1,121 @@
-"""Web Security Module - SQL Injection Tester"""
+"""
+Web Security Module - SQL Injection Tester
+"""
 
 import logging
 import time
-from typing import Dict, List, Any
+import requests
+from typing import Dict
 
 logger = logging.getLogger(__name__)
 
 class SQLITester:
-    """Safe SQL Injection testing module"""
+    """Safe SQL Injection detection module (response anomaly based)"""
     
     def __init__(self):
         self.name = "SQL Injection Tester"
-        self.version = "1.0.0"
+        self.version = "2.0.0"
         self.mitre_id = "T1190"
         self.severity = "High"
         self.test_payloads = [
-            {'name': 'Basic quote test', 'payload': "'", 'description': 'Tests for basic SQL injection'},
-            {'name': 'Union test', 'payload': "' UNION SELECT NULL--", 'description': 'Tests UNION-based injection'},
-            {'name': 'Boolean test', 'payload': "' OR '1'='1", 'description': 'Tests boolean-based injection'},
+            {"name": "Basic quote test", "payload": "'"},
+            {"name": "Union test", "payload": "' UNION SELECT NULL--"},
+            {"name": "Boolean test", "payload": "' OR '1'='1"}
         ]
-    
+
     async def execute(self, config: Dict) -> Dict:
-        """Execute SQL injection tests"""
-        target = config.get('target', {})
-        url = target.get('url')
-        
-        logger.info(f"Starting SQL injection test on {url}")
-        
+        """
+        Execute SQL injection detection (safe validation mode)
+        """
+        target = config.get("target", {})
+        url = target.get("url")
+
+        logger.info(f"[SQLI] Starting SQL injection detection on {url}")
+
         results = {
-            'module': 'sqli',
-            'target': url,
-            'tests': [],
-            'vulnerabilities': [],
-            'summary': {},
-            'timestamp': time.time()
+            "module": "sqli",
+            "target": url,
+            "tests": [],
+            "vulnerabilities": [],
+            "timestamp": time.time()
         }
-        
-        # Simulate testing
-        for payload in self.test_payloads:
-            test_result = {
-                'parameter': 'id',
-                'payload': payload['name'],
-                'vulnerable': False,
-                'confidence': 0.3,
-                'evidence': None
-            }
-            results['tests'].append(test_result)
-        
-        results['summary'] = {
-            'total_tests': len(results['tests']),
-            'vulnerabilities_found': len(results['vulnerabilities']),
-            'risk_level': 'Low',
-            'mitre_mapping': self.mitre_id
-        }
-        
-        return results
-    
+
+        if not url:
+            results["error"] = "No target URL provided"
+            return results
+
+        try:
+            # Baseline request
+            baseline_response = requests.get(url, timeout=5)
+            baseline_length = len(baseline_response.text)
+
+            for payload in self.test_payloads:
+                test_url = f"{url}?id={payload['payload']}"
+
+                try:
+                    response = requests.get(test_url, timeout=5)
+
+                    response_length = len(response.text)
+                    length_diff = abs(response_length - baseline_length)
+
+                    sql_error_patterns = [
+                        "sql syntax",
+                        "mysql_fetch",
+                        "ora-",
+                        "syntax error",
+                        "warning: mysql",
+                        "unclosed quotation mark",
+                        "odbc",
+                        "pdoexception"
+                    ]
+
+                    error_detected = any(
+                        pattern in response.text.lower()
+                        for pattern in sql_error_patterns
+                    )
+
+                    vulnerable = False
+                    confidence = 0.2
+                    evidence = None
+
+                    if error_detected:
+                        vulnerable = True
+                        confidence = 0.9
+                        evidence = "SQL error message detected in response"
+
+                    elif length_diff > 150:
+                        vulnerable = True
+                        confidence = 0.6
+                        evidence = f"Significant response length difference detected ({length_diff} bytes)"
+
+                    test_result = {
+                        "parameter": "id",
+                        "payload": payload["payload"],
+                        "vulnerable": vulnerable,
+                        "confidence": confidence,
+                        "evidence": evidence,
+                        "mitre_id": self.mitre_id
+                    }
+
+                    results["tests"].append(test_result)
+
+                    if vulnerable:
+                        results["vulnerabilities"].append(test_result)
+
+                except Exception as request_error:
+                    logger.warning(f"[SQLI] Request failed: {str(request_error)}")
+
+            return results
+
+        except Exception as e:
+            logger.error(f"[SQLI] Execution failed: {str(e)}")
+            results["error"] = str(e)
+            return results
+
     def get_metadata(self) -> Dict:
-        """Get module metadata"""
         return {
-            'name': self.name,
-            'version': self.version,
-            'mitre_id': self.mitre_id,
-            'severity': self.severity
+            "name": self.name,
+            "version": self.version,
+            "mitre_id": self.mitre_id,
+            "severity": self.severity
         }
