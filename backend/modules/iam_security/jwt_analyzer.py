@@ -1,7 +1,11 @@
 import jwt
 from datetime import datetime
 
+
 def analyze_jwt(token):
+    """
+    Analyze JWT token security
+    """
 
     findings = []
 
@@ -12,18 +16,21 @@ def analyze_jwt(token):
             findings.append({
                 "type": "JWT None Algorithm",
                 "severity": "Critical",
-                "description": "Token uses insecure 'none' algorithm"
+                "risk_score": 9.5,
+                "description": "JWT token uses insecure 'none' algorithm"
             })
 
         payload = jwt.decode(token, options={"verify_signature": False})
 
         if "exp" in payload:
-            expiry = datetime.fromtimestamp(payload["exp"])
-            if expiry < datetime.utcnow():
+            expiry_time = datetime.fromtimestamp(payload["exp"])
+
+            if expiry_time < datetime.utcnow():
                 findings.append({
                     "type": "Expired JWT Token",
                     "severity": "Medium",
-                    "description": "Token has already expired"
+                    "risk_score": 5.0,
+                    "description": "JWT token has expired"
                 })
 
         findings.append({
