@@ -1,6 +1,5 @@
 import requests
 
-
 def test_session(target):
 
     findings = []
@@ -12,8 +11,15 @@ def test_session(target):
 
             if not cookie.secure:
                 findings.append({
-                    "type": "Insecure Session Cookie",
+                    "type": "Insecure Cookie",
                     "severity": "Medium",
+                    "cookie": cookie.name
+                })
+
+            if not cookie.has_nonstandard_attr("HttpOnly"):
+                findings.append({
+                    "type": "Missing HttpOnly Cookie Flag",
+                    "severity": "Low",
                     "cookie": cookie.name
                 })
 

@@ -1,15 +1,19 @@
 import requests
+import time
 
-USERNAMES = ["admin", "user", "test"]
-PASSWORDS = ["admin", "password", "123456", "admin123"]
+USERNAMES = ["admin", "test"]
+PASSWORDS = ["admin", "password", "123456"]
 
 
 def test_credentials(target):
 
     results = []
+    attempts = 0
 
     for user in USERNAMES:
         for password in PASSWORDS:
+
+            attempts += 1
 
             try:
                 r = requests.post(
@@ -28,5 +32,14 @@ def test_credentials(target):
 
             except Exception:
                 pass
+
+            time.sleep(0.3)
+
+    if attempts > 5:
+        results.append({
+            "type": "Rate Limit Missing",
+            "severity": "Medium",
+            "description": "Login endpoint does not appear to rate limit requests"
+        })
 
     return results
