@@ -1,58 +1,32 @@
-"""IAM Security Module - Credential Stuffing Tester"""
+import requests
 
-import logging
-import time
-from typing import Dict
+USERNAMES = ["admin", "user", "test"]
+PASSWORDS = ["admin", "password", "123456", "admin123"]
 
-logger = logging.getLogger(__name__)
 
-class CredentialStuffingTester:
-    """Credential stuffing testing module"""
-    
-    def __init__(self):
-        self.name = "Credential Stuffing Tester"
-        self.version = "1.0.0"
-        self.mitre_id = "T1110.001"
-    
-    async def execute(self, config: Dict) -> Dict:
-        """Execute credential stuffing tests"""
-        return {
-            'module': 'credential_stuffing',
-            'target': config.get('target', {}).get('url'),
-            'vulnerabilities': [],
-            'timestamp': time.time()
-        }
+def test_credentials(target):
 
-class JWTTester:
-    """JWT vulnerability testing module"""
-    
-    def __init__(self):
-        self.name = "JWT Tester"
-        self.version = "1.0.0"
-        self.mitre_id = "T1110.004"
-    
-    async def execute(self, config: Dict) -> Dict:
-        """Execute JWT tests"""
-        return {
-            'module': 'jwt',
-            'target': config.get('target', {}).get('url'),
-            'vulnerabilities': [],
-            'timestamp': time.time()
-        }
+    results = []
 
-class RBACTester:
-    """RBAC testing module"""
-    
-    def __init__(self):
-        self.name = "RBAC Tester"
-        self.version = "1.0.0"
-        self.mitre_id = "T1078.001"
-    
-    async def execute(self, config: Dict) -> Dict:
-        """Execute RBAC tests"""
-        return {
-            'module': 'rbac',
-            'target': config.get('target', {}).get('url'),
-            'vulnerabilities': [],
-            'timestamp': time.time()
-        }
+    for user in USERNAMES:
+        for password in PASSWORDS:
+
+            try:
+                r = requests.post(
+                    f"{target}/login",
+                    json={"username": user, "password": password},
+                    timeout=3
+                )
+
+                if r.status_code == 200:
+                    results.append({
+                        "type": "Credential Stuffing",
+                        "severity": "High",
+                        "username": user,
+                        "password": password
+                    })
+
+            except Exception:
+                pass
+
+    return results
