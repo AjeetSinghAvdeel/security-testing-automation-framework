@@ -1,8 +1,44 @@
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "";
+function resolveApiBaseUrl() {
+  if (import.meta.env.VITE_API_BASE_URL) {
+    return import.meta.env.VITE_API_BASE_URL;
+  }
 
-async function request(path, options = {}) {
-  const response = await fetch(`${API_BASE_URL}${path}`, options);
-  const payload = await response.json();
+  if (typeof window === "undefined") {
+    return "";
+  }
+
+  const { hostname, port } = window.location;
+
+  if ((hostname === "localhost" || hostname === "127.0.0.1") && port !== "5000") {
+    return "http://127.0.0.1:5000";
+  }
+
+  return "";
+}
+
+const API_BASE_URL = resolveApiBaseUrl();
+
+async function request(path, token, options = {}) {
+  const response = await fetch(`${API_BASE_URL}${path}`, {
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...(options.headers || {}),
+    },
+  });
+  const contentType = response.headers.get("content-type") || "";
+  let payload;
+
+  if (contentType.includes("application/json")) {
+    payload = await response.json();
+  } else {
+    const text = await response.text();
+    const preview = text.slice(0, 80).replace(/\s+/g, " ").trim();
+    throw new Error(
+      `API returned ${contentType || "non-JSON content"} instead of JSON. ${preview}`,
+    );
+  }
 
   if (!response.ok) {
     throw new Error(payload.error || "Request failed");
@@ -11,32 +47,37 @@ async function request(path, options = {}) {
   return payload;
 }
 
-export function runScan(target) {
-  return request("/api/tests/run", {
+export function runScan(token, target) {
+  return request("/api/tests/run", token, {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
     body: JSON.stringify({ target }),
   });
 }
 
-export function getScanStatus(testId) {
-  return request(`/api/tests/status/${testId}`);
+export function getScanStatus(token, testId) {
+  return request(`/api/tests/status/${testId}`, token);
 }
 
-export function getScanDetails(testId) {
-  return request(`/api/tests/${testId}`);
+export function getScanDetails(token, testId) {
+  return request(`/api/tests/${testId}`, token);
 }
 
-export function getDashboardStats() {
-  return request("/api/dashboard/stats");
+export function getDashboardStats(token) {
+  return request("/api/dashboard/stats", token);
 }
 
-export function getModules() {
-  return request("/api/modules");
+export function getModules(token) {
+  return request("/api/modules", token);
 }
 
-export function getTests() {
-  return request("/api/tests");
+export function getTests(token) {
+  return request("/api/tests", token);
+}
+
+export function getBlockchainStatus(token) {
+  return request("/api/blockchain/status", token);
+}
+
+export function getSession(token) {
+  return request("/api/auth/session", token);
 }

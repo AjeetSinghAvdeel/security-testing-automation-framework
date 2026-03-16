@@ -12,9 +12,19 @@ export default function ScanForm({ onRunScan, status, isRunning }) {
 
   return (
     <section className="panel panel-accent">
-      <div className="section-copy">
-        <p className="section-label">Scan Control</p>
-        <h2>Launch a security scan against a safe local target.</h2>
+      <div className="scan-header">
+        <div className="section-copy">
+          <p className="section-label">Scan Control</p>
+          <h2>Launch a security scan against a safe local target.</h2>
+          <p className="section-note">
+            Use private lab targets, local services, or Docker-safe internal hostnames for valid scans.
+          </p>
+        </div>
+
+        <div className="scan-chip-group">
+          <span className="scan-chip">Safe Mode</span>
+          <span className="scan-chip scan-chip-muted">Real-time Status</span>
+        </div>
       </div>
 
       <form className="scan-form" onSubmit={handleSubmit}>

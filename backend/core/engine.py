@@ -9,6 +9,8 @@ import threading
 from typing import Any, Dict, List
 import uuid
 
+from backend.blockchain.blockchain_auditor import blockchain_auditor
+
 
 class ScanEngine:
     """Registers modules and executes them through a common run(target) API."""
@@ -59,7 +61,7 @@ class ScanEngine:
 
         return findings
 
-    def create_test(self, target: str, modules: List[Any]) -> Dict[str, Any]:
+    def create_test(self, target: str, modules: List[Any], user: Dict[str, Any]) -> Dict[str, Any]:
         test_id = f"test-{uuid.uuid4().hex[:8]}"
 
         self.clear_modules()
@@ -75,6 +77,9 @@ class ScanEngine:
             "created_at": datetime.utcnow().isoformat(),
             "completed_at": None,
             "error": None,
+            "user_id": user["uid"],
+            "user_name": user.get("name"),
+            "user_email": user.get("email"),
         }
         with self._lock:
             self.tests[test_id] = record
@@ -95,8 +100,7 @@ class ScanEngine:
         if record is not None:
             return dict(record)
 
-        if self._store is not None:
-            return self._store.get_test(test_id)
+        return None
         return None
 
     def get_test_status(self, test_id: str) -> Dict[str, Any] | None:
@@ -123,6 +127,15 @@ class ScanEngine:
                 record["results"] = findings
                 record["result_count"] = len(findings)
                 record["completed_at"] = datetime.utcnow().isoformat()
+                evidence_hash = blockchain_auditor.hash_evidence(record)
+                tx_hash = blockchain_auditor.store_hash(
+                    evidence_hash=evidence_hash,
+                    attack_type="SECURITY_SCAN",
+                    target_info=target,
+                    severity=self._severity_score(findings),
+                )
+                record["evidence_hash"] = evidence_hash
+                record["blockchain_tx"] = tx_hash
         except Exception as exc:
             with self._lock:
                 record = self.tests[test_id]
@@ -230,6 +243,15 @@ class ScanEngine:
         if normalized == "Error":
             return "Low"
         return normalized
+
+    def _severity_score(self, findings: List[Dict[str, Any]]) -> int:
+        severity_map = {
+            "Critical": 10,
+            "High": 8,
+            "Medium": 5,
+            "Low": 3,
+        }
+        return max((severity_map.get(finding.get("severity"), 1) for finding in findings), default=1)
 
 
 engine = ScanEngine()

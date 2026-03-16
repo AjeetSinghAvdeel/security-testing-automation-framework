@@ -1,7 +1,7 @@
-import Dashboard from "../components/Dashboard";
 import Navbar from "../components/Navbar";
+import Dashboard from "../components/Dashboard";
 
-export default function Home() {
+export default function DashboardPage() {
   return (
     <div className="app-shell">
       <Navbar />

@@ -1,12 +1,15 @@
 import { useEffect, useRef, useState } from "react";
 import {
+  getBlockchainStatus,
   getDashboardStats,
   getModules,
+  getSession,
   getScanDetails,
   getScanStatus,
   getTests,
   runScan,
 } from "../services/api";
+import { useAuth } from "../auth/AuthProvider";
 import ScanForm from "./ScanForm";
 import ScanResults from "./ScanResults";
 
@@ -16,20 +19,32 @@ const initialStatus = {
 };
 
 export default function Dashboard() {
+  const { token } = useAuth();
   const [stats, setStats] = useState({
     totalTests: 0,
     totalVulnerabilities: 0,
     highCount: 0,
+    blockchainRecords: 0,
   });
+  const [sessionUser, setSessionUser] = useState(null);
   const [results, setResults] = useState([]);
+  const [activeScan, setActiveScan] = useState(null);
   const [modules, setModules] = useState([]);
   const [tests, setTests] = useState([]);
+  const [blockchainStatus, setBlockchainStatus] = useState({
+    connected: false,
+    evidence_count: 0,
+  });
   const [status, setStatus] = useState(initialStatus);
   const [activeTestId, setActiveTestId] = useState("");
   const [isRunning, setIsRunning] = useState(false);
   const pollerRef = useRef(null);
 
   useEffect(() => {
+    if (!token) {
+      return undefined;
+    }
+
     void loadDashboard();
     const refreshInterval = window.setInterval(() => {
       void loadDashboard();
@@ -41,23 +56,34 @@ export default function Dashboard() {
         window.clearInterval(pollerRef.current);
       }
     };
-  }, []);
+  }, [token]);
 
   async function loadDashboard() {
     try {
-      const [statsPayload, modulesPayload, testsPayload] = await Promise.all([
-        getDashboardStats(),
-        getModules(),
-        getTests(),
+      const [
+        statsPayload,
+        modulesPayload,
+        testsPayload,
+        blockchainPayload,
+        sessionPayload,
+      ] = await Promise.all([
+        getDashboardStats(token),
+        getModules(token),
+        getTests(token),
+        getBlockchainStatus(token),
+        getSession(token),
       ]);
 
       setStats({
         totalTests: statsPayload.totalTests || 0,
         totalVulnerabilities: statsPayload.totalVulnerabilities || 0,
         highCount: statsPayload.highCount || 0,
+        blockchainRecords: statsPayload.blockchainRecords || 0,
       });
       setModules(modulesPayload.modules || []);
       setTests(testsPayload.tests || []);
+      setBlockchainStatus(blockchainPayload);
+      setSessionUser(sessionPayload.user || null);
     } catch (error) {
       setStatus({
         state: "failed",
@@ -77,13 +103,14 @@ export default function Dashboard() {
 
     setIsRunning(true);
     setResults([]);
+    setActiveScan(null);
     setStatus({
       state: "running",
       message: `Running scan against ${target}...`,
     });
 
     try {
-      const scan = await runScan(target.trim());
+      const scan = await runScan(token, target.trim());
       setActiveTestId(scan.test_id);
       startPolling(scan.test_id, target.trim());
     } catch (error) {
@@ -102,14 +129,14 @@ export default function Dashboard() {
 
     pollerRef.current = window.setInterval(async () => {
       try {
-        const scanStatus = await getScanStatus(testId);
-
+        const scanStatus = await getScanStatus(token, testId);
         if (scanStatus.status === "completed") {
           window.clearInterval(pollerRef.current);
           pollerRef.current = null;
 
-          const details = await getScanDetails(testId);
+          const details = await getScanDetails(token, testId);
           setResults(details.results || []);
+          setActiveScan(details);
           setIsRunning(false);
           setStatus({
             state: "completed",
@@ -146,16 +173,36 @@ export default function Dashboard() {
 
   return (
     <main className="dashboard">
+      <section className="dashboard-overview panel">
+        <div>
+          <p className="section-label">Dashboard</p>
+          <h2>{sessionUser?.name || "Analyst"}'s command center</h2>
+          <p className="panel-subtitle">
+            Only your scans, your evidence trail, and your blockchain-linked records are visible in this workspace.
+          </p>
+        </div>
+      </section>
+
       <ScanForm onRunScan={handleRunScan} status={status} isRunning={isRunning} />
 
       <section className="stats-grid">
-        <StatCard label="Total scans" value={stats.totalTests} />
-        <StatCard label="Vulnerabilities detected" value={stats.totalVulnerabilities} />
-        <StatCard label="High severity alerts" value={stats.highCount} />
+        <StatCard label="Total scans" value={stats.totalTests} accent="blue" />
+        <StatCard
+          label="Vulnerabilities detected"
+          value={stats.totalVulnerabilities}
+          accent="slate"
+        />
+        <StatCard label="High severity alerts" value={stats.highCount} accent="red" />
+        <StatCard
+          label={blockchainStatus.connected ? "Blockchain records" : "Blockchain offline records"}
+          value={stats.blockchainRecords}
+          accent="green"
+        />
       </section>
 
       <section className="layout-grid">
-        <ScanResults results={results} activeTestId={activeTestId} />
+        <ScanResults results={results} activeTestId={activeTestId} activeScan={activeScan} />
+
 
         <section className="panel side-panel">
           <div className="panel-header">
@@ -190,19 +237,30 @@ export default function Dashboard() {
 
           <div className="history-list">
             {tests.slice(0, 6).map((test) => (
-              <button
-                className="history-card"
-                key={test.test_id}
-                type="button"
-                onClick={() => {
-                  setActiveTestId(test.test_id);
-                  setResults(test.results || []);
-                }}
-              >
-                <strong>{test.target}</strong>
-                <span>{test.status}</span>
-                <small>{test.result_count || 0} findings</small>
-              </button>
+              <details className="history-card" key={test.test_id}>
+                <summary>
+                  <div className="history-summary">
+                    <strong>{test.target}</strong>
+                    <span>{test.status}</span>
+                    <small>{test.result_count || 0} findings</small>
+                  </div>
+                </summary>
+                <div className="history-details">
+                  <p>Test ID: {test.test_id}</p>
+                  {test.blockchain_tx ? <p>Blockchain TX: {test.blockchain_tx}</p> : null}
+                  <button
+                    className="inline-action"
+                    type="button"
+                    onClick={() => {
+                      setActiveTestId(test.test_id);
+                      setResults(test.results || []);
+                      setActiveScan(test);
+                    }}
+                  >
+                    View scan details
+                  </button>
+                </div>
+              </details>
             ))}
           </div>
         </section>
@@ -211,9 +269,9 @@ export default function Dashboard() {
   );
 }
 
-function StatCard({ label, value }) {
+function StatCard({ label, value, accent = "blue" }) {
   return (
-    <article className="stat-card">
+    <article className={`stat-card stat-card-${accent}`}>
       <span>{label}</span>
       <strong>{value}</strong>
     </article>

@@ -11,9 +11,10 @@ import threading
 
 try:
     import firebase_admin
-    from firebase_admin import credentials, firestore
+    from firebase_admin import auth, credentials, firestore
 except Exception:  # pragma: no cover - dependency may be absent in some environments
     firebase_admin = None
+    auth = None
     credentials = None
     firestore = None
 
@@ -66,6 +67,22 @@ class FirebaseStore:
         _ = self.client
         return self._init_error
 
+    def verify_token(self, token: str) -> Dict[str, Any] | None:
+        client = self.client
+        if client is None or auth is None:
+            return None
+
+        try:
+            decoded = auth.verify_id_token(token)
+            return {
+                "uid": decoded.get("uid"),
+                "email": decoded.get("email"),
+                "name": decoded.get("name") or decoded.get("email") or "User",
+                "picture": decoded.get("picture"),
+            }
+        except Exception:
+            return None
+
     def save_test(self, test: Dict[str, Any]) -> None:
         client = self.client
         if client is None:
@@ -75,7 +92,7 @@ class FirebaseStore:
         payload["updated_at"] = datetime.utcnow().isoformat()
         client.collection("scans").document(test["test_id"]).set(payload)
 
-    def get_test(self, test_id: str) -> Dict[str, Any] | None:
+    def get_test(self, user_id: str, test_id: str) -> Dict[str, Any] | None:
         client = self.client
         if client is None:
             return None
@@ -83,22 +100,23 @@ class FirebaseStore:
         document = client.collection("scans").document(test_id).get()
         if not document.exists:
             return None
-        return document.to_dict()
+        payload = document.to_dict()
+        if payload.get("user_id") != user_id:
+            return None
+        return payload
 
-    def list_tests(self, limit: int = 20) -> List[Dict[str, Any]]:
+    def list_tests(self, user_id: str, limit: int = 20) -> List[Dict[str, Any]]:
         client = self.client
         if client is None:
             return []
 
-        query = (
-            client.collection("scans")
-            .order_by("created_at", direction=firestore.Query.DESCENDING)
-            .limit(limit)
-        )
-        return [document.to_dict() for document in query.stream()]
+        query = client.collection("scans").where("user_id", "==", user_id)
+        tests = [document.to_dict() for document in query.stream()]
+        tests.sort(key=lambda item: item.get("created_at") or "", reverse=True)
+        return tests[:limit]
 
-    def get_stats(self) -> Dict[str, int]:
-        tests = self.list_tests(limit=100)
+    def get_stats(self, user_id: str) -> Dict[str, int]:
+        tests = self.list_tests(user_id=user_id, limit=100)
         findings = [finding for test in tests for finding in test.get("results", [])]
 
         stats = {
