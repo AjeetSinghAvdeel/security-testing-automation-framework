@@ -1,58 +1,12 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Security Testing Dashboard</title>
-    <link rel="stylesheet" href="css/style.css">
-</head>
-<body>
-    <main class="shell">
-        <section class="hero">
-            <p class="eyebrow">IoT & Web Security Testing Framework</p>
-            <h1>Run safe local scans from one dashboard.</h1>
-            <p class="lede">This view is wired to the core scan engine and renders vulnerabilities returned by the API.</p>
-        </section>
-
-        <section class="panel controls">
-            <label for="target-input">Target host</label>
-            <div class="control-row">
-                <input id="target-input" type="text" placeholder="localhost or 192.168.1.10" value="localhost">
-                <button id="run-scan-btn" type="button">Run Scan</button>
-            </div>
-            <p id="status-message" class="status-message">Ready.</p>
-        </section>
-
-        <section class="grid">
-            <article class="panel stat-card">
-                <span class="stat-label">Tests</span>
-                <strong id="total-tests">0</strong>
-            </article>
-            <article class="panel stat-card">
-                <span class="stat-label">Vulnerabilities</span>
-                <strong id="total-vulnerabilities">0</strong>
-            </article>
-            <article class="panel stat-card">
-                <span class="stat-label">High</span>
-                <strong id="high-count">0</strong>
-            </article>
-            <article class="panel stat-card">
-                <span class="stat-label">Medium</span>
-                <strong id="medium-count">0</strong>
-            </article>
-        </section>
-
-        <section class="panel">
-            <div class="section-head">
-                <h2>Results</h2>
-                <span id="last-test-id" class="pill">No test yet</span>
-            </div>
-            <div id="results" class="results empty">
-                <p>No results yet. Run a scan against a safe local target.</p>
-            </div>
-        </section>
-    </main>
-
-    <script src="js/app.js"></script>
-</body>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>IoT & Web Security Testing Framework</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.jsx"></script>
+  </body>
 </html>
