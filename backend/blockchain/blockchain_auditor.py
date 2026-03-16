@@ -50,8 +50,11 @@ class BlockchainAuditor:
     # ============================================================
 
     def hash_evidence(self, data: Dict) -> str:
+        """Generate SHA256 hash for evidence data"""
+
         data_string = json.dumps(data, sort_keys=True, default=str)
         evidence_hash = hashlib.sha256(data_string.encode()).hexdigest()
+
         return evidence_hash
 
     # ============================================================
@@ -76,19 +79,21 @@ class BlockchainAuditor:
             "timestamp": datetime.utcnow().isoformat()
         }
 
+        # Offline mode
         if not self.connected:
             logger.warning("[BLOCKCHAIN] Offline mode — storing locally only")
             self.evidence_records.append(record)
             return "OFFLINE_MODE"
 
         try:
-            # Send minimal transaction (0 ETH transfer to self)
             account = self.w3.eth.accounts[0]
 
+            # Store evidence hash inside transaction data
             tx_hash = self.w3.eth.send_transaction({
                 "from": account,
                 "to": account,
-                "value": 0
+                "value": 0,
+                "data": self.w3.to_hex(text=evidence_hash)
             })
 
             record["tx_hash"] = tx_hash.hex()
@@ -105,8 +110,28 @@ class BlockchainAuditor:
     # ============================================================
 
     def verify_evidence(self, evidence_hash: str, evidence_data: Dict) -> bool:
+        """Verify if data matches the stored evidence hash"""
+
         computed_hash = self.hash_evidence(evidence_data)
         return computed_hash == evidence_hash
+
+    # ============================================================
+    # GET TRANSACTION
+    # ============================================================
+
+    def get_transaction(self, tx_hash: str):
+        """Retrieve transaction from blockchain"""
+
+        if not self.connected:
+            return None
+
+        try:
+            tx = self.w3.eth.get_transaction(tx_hash)
+            return tx
+
+        except Exception as e:
+            logger.error(f"[BLOCKCHAIN] Failed to fetch transaction: {str(e)}")
+            return None
 
     # ============================================================
     # STATISTICS
@@ -115,16 +140,19 @@ class BlockchainAuditor:
     def get_statistics(self) -> Dict:
 
         block_number = 0
+        accounts = []
 
         if self.connected:
             try:
                 block_number = self.w3.eth.block_number
+                accounts = self.w3.eth.accounts
             except:
-                block_number = 0
+                pass
 
         return {
             "connected": self.connected,
             "block_number": block_number,
+            "accounts": accounts,
             "evidence_count": len(self.evidence_records),
             "network_id": 5777
         }
