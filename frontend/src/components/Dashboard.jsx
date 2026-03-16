@@ -25,6 +25,9 @@ export default function Dashboard() {
     totalVulnerabilities: 0,
     highCount: 0,
     blockchainRecords: 0,
+    siemAlerts: 0,
+    complianceMappings: 0,
+    reportsGenerated: 0,
   });
   const [sessionUser, setSessionUser] = useState(null);
   const [results, setResults] = useState([]);
@@ -74,14 +77,31 @@ export default function Dashboard() {
         getSession(token),
       ]);
 
+      const tests = testsPayload.tests || [];
+      const siemAlerts = tests.reduce(
+        (count, test) => count + (test.siem?.alerts?.length || 0),
+        0,
+      );
+      const complianceMappings = tests.reduce(
+        (count, test) => count + (test.siem?.compliance?.length || 0),
+        0,
+      );
+      const reportsGenerated = tests.reduce(
+        (count, test) => count + (test.siem?.report ? 1 : 0),
+        0,
+      );
+
       setStats({
         totalTests: statsPayload.totalTests || 0,
         totalVulnerabilities: statsPayload.totalVulnerabilities || 0,
         highCount: statsPayload.highCount || 0,
         blockchainRecords: statsPayload.blockchainRecords || 0,
+        siemAlerts,
+        complianceMappings,
+        reportsGenerated,
       });
       setModules(modulesPayload.modules || []);
-      setTests(testsPayload.tests || []);
+      setTests(tests);
       setBlockchainStatus(blockchainPayload);
       setSessionUser(sessionPayload.user || null);
     } catch (error) {
@@ -193,6 +213,9 @@ export default function Dashboard() {
           accent="slate"
         />
         <StatCard label="High severity alerts" value={stats.highCount} accent="red" />
+        <StatCard label="SIEM alerts" value={stats.siemAlerts} accent="teal" />
+        <StatCard label="Compliance mappings" value={stats.complianceMappings} accent="amber" />
+        <StatCard label="Reports generated" value={stats.reportsGenerated} accent="violet" />
         <StatCard
           label={blockchainStatus.connected ? "Blockchain records" : "Blockchain offline records"}
           value={stats.blockchainRecords}

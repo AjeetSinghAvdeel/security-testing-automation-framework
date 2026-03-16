@@ -6,6 +6,11 @@ export default function ScanResults({ results, activeTestId, activeScan }) {
   ).length;
   const targetLabel = activeScan?.target || results[0]?.target || "Unknown target";
   const statusLabel = activeScan?.status || (results.length ? "completed" : "idle");
+  const siemPayload = activeScan?.siem;
+  const siemAlerts = siemPayload?.alerts || [];
+  const complianceMappings = siemPayload?.compliance || [];
+  const reportSummary = siemPayload?.report || null;
+  const siemLogs = siemPayload?.logs || [];
 
   return (
     <section className="panel">
@@ -52,6 +57,82 @@ export default function ScanResults({ results, activeTestId, activeScan }) {
           </summary>
 
           <div className="scan-result-details">
+            {siemPayload ? (
+              <div className="analysis-grid">
+                <article className="analysis-card">
+                  <p className="vuln-eyebrow">SIEM Alerts</p>
+                  <h3>{siemAlerts.length || 0} high-risk alerts</h3>
+                  <p className="analysis-copy">
+                    High and critical findings are transformed into alert artifacts for downstream
+                    investigation.
+                  </p>
+                  {siemAlerts.length ? (
+                    <div className="analysis-list">
+                      {siemAlerts.slice(0, 4).map((alert) => (
+                        <div className="analysis-item" key={alert.alert_id || alert.timestamp}>
+                          <strong>{alert.vulnerability || "Security alert"}</strong>
+                          <span>{alert.severity || "Unknown"} severity</span>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="analysis-empty">No high-severity alerts were generated for this scan.</p>
+                  )}
+                </article>
+
+                <article className="analysis-card">
+                  <p className="vuln-eyebrow">Compliance Mapping</p>
+                  <h3>{complianceMappings.length || 0} mapped findings</h3>
+                  <p className="analysis-copy">
+                    Findings are mapped against NIST and ISO 27001 controls for audit-oriented review.
+                  </p>
+                  {complianceMappings.length ? (
+                    <div className="analysis-list">
+                      {complianceMappings.slice(0, 4).map((mapping, index) => (
+                        <div
+                          className="analysis-item analysis-item-compact"
+                          key={`${mapping.vulnerability || "mapping"}-${index}`}
+                        >
+                          <strong>{mapping.vulnerability || "Finding"}</strong>
+                          <span>NIST: {(mapping.nist_controls || []).join(", ") || "Not mapped"}</span>
+                          <span>ISO: {(mapping.iso27001_controls || []).join(", ") || "Not mapped"}</span>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="analysis-empty">No compliance mappings are attached to this scan yet.</p>
+                  )}
+                </article>
+
+                <article className="analysis-card">
+                  <p className="vuln-eyebrow">Report Summary</p>
+                  <h3>{reportSummary?.report_id || "Summary pending"}</h3>
+                  <p className="analysis-copy">
+                    Post-processing generates a compact scan report with severity breakdown and
+                    evidence-linked context.
+                  </p>
+                  {reportSummary ? (
+                    <div className="summary-metrics">
+                      <div className="summary-metric">
+                        <span>Findings</span>
+                        <strong>{reportSummary.total_findings || results.length}</strong>
+                      </div>
+                      <div className="summary-metric">
+                        <span>Alerts</span>
+                        <strong>{reportSummary.alerts_generated || siemAlerts.length}</strong>
+                      </div>
+                      <div className="summary-metric">
+                        <span>Logs</span>
+                        <strong>{siemLogs.length}</strong>
+                      </div>
+                    </div>
+                  ) : (
+                    <p className="analysis-empty">No report summary was generated for this scan.</p>
+                  )}
+                </article>
+              </div>
+            ) : null}
+
             <div className="results-grid">
               {results.map((item, index) => (
                 <VulnerabilityCard

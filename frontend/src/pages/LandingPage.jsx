@@ -46,6 +46,21 @@ const capabilities = [
   "Web and IAM module support",
 ];
 
+const governanceHighlights = [
+  {
+    title: "SIEM-ready telemetry",
+    body: "Each completed scan can emit alert and log artifacts that are ready for downstream review workflows.",
+  },
+  {
+    title: "Compliance alignment",
+    body: "Mapped findings connect vulnerabilities to NIST and ISO 27001 controls for presentation and audit review.",
+  },
+  {
+    title: "Executive summaries",
+    body: "Report summaries package findings, alert counts, and evidence context into one scan-centered view.",
+  },
+];
+
 export default function LandingPage() {
   return (
     <div className="page-shell landing-shell">
@@ -148,6 +163,22 @@ export default function LandingPage() {
             <div className="system-chip" key={capability}>
               {capability}
             </div>
+          ))}
+        </div>
+      </section>
+
+      <section className="platform-section">
+        <div className="section-intro">
+          <p className="section-label">SIEM And Governance</p>
+          <h2>Operational logging, compliance context, and reporting are now part of the scan lifecycle.</h2>
+        </div>
+
+        <div className="pillar-grid">
+          {governanceHighlights.map((item) => (
+            <article className="pillar-card" key={item.title}>
+              <h3>{item.title}</h3>
+              <p>{item.body}</p>
+            </article>
           ))}
         </div>
       </section>
