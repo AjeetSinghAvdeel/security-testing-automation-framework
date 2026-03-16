@@ -10,6 +10,7 @@ from typing import Any, Dict, List
 import uuid
 
 from backend.blockchain.blockchain_auditor import blockchain_auditor
+from backend.siem.siem_service import SIEMService
 
 
 class ScanEngine:
@@ -20,6 +21,7 @@ class ScanEngine:
         self.tests: Dict[str, Dict[str, Any]] = {}
         self._lock = threading.Lock()
         self._store = None
+        self._siem_service = SIEMService()
 
     def register_module(self, module: Any) -> None:
         if module not in self.modules:
@@ -101,7 +103,6 @@ class ScanEngine:
             return dict(record)
 
         return None
-        return None
 
     def get_test_status(self, test_id: str) -> Dict[str, Any] | None:
         test = self.get_test(test_id)
@@ -127,6 +128,7 @@ class ScanEngine:
                 record["results"] = findings
                 record["result_count"] = len(findings)
                 record["completed_at"] = datetime.utcnow().isoformat()
+                record["module"] = "multi_module"
                 evidence_hash = blockchain_auditor.hash_evidence(record)
                 tx_hash = blockchain_auditor.store_hash(
                     evidence_hash=evidence_hash,
@@ -136,6 +138,7 @@ class ScanEngine:
                 )
                 record["evidence_hash"] = evidence_hash
                 record["blockchain_tx"] = tx_hash
+            self._attach_siem_outputs(test_id)
         except Exception as exc:
             with self._lock:
                 record = self.tests[test_id]
@@ -159,6 +162,22 @@ class ScanEngine:
             self._store.save_test(record)
         except Exception:
             pass
+
+    def _attach_siem_outputs(self, test_id: str) -> None:
+        """Attach SIEM/compliance artifacts without affecting scan success."""
+        with self._lock:
+            record = dict(self.tests[test_id])
+
+        try:
+            siem_payload = self._siem_service.process_results(record)
+        except Exception as exc:
+            siem_payload = {"error": str(exc)}
+
+        with self._lock:
+            current = self.tests[test_id]
+            current["siem"] = siem_payload
+
+        self._persist(self.tests[test_id])
 
     def _extract_findings(
         self, result: Any, module_name: str, target: str
