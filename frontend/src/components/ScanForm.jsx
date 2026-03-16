@@ -1,7 +1,9 @@
 import { useState } from "react";
 
 export default function ScanForm({ onRunScan, status, isRunning }) {
-  const [target, setTarget] = useState("localhost");
+  const defaultTarget =
+    window.location.port === "8080" ? "http://frontend" : "http://localhost";
+  const [target, setTarget] = useState(defaultTarget);
 
   function handleSubmit(event) {
     event.preventDefault();

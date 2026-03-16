@@ -19,7 +19,7 @@ paho-mqtt==1.6.1
 aiocoap==0.4.3
 
 # Security
-pyjwt==2.6.0
+pyjwt==2.10.1
 cryptography==39.0.0
 passlib==1.7.4
 bcrypt==4.0.1
@@ -43,3 +43,6 @@ weasyprint==57.2
 # Monitoring
 prometheus-client==0.16.0
 psutil==5.9.4
+
+# Firebase
+firebase-admin==6.5.0

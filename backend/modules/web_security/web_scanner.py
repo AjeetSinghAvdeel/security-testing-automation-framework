@@ -1,5 +1,7 @@
-from .sqli_tester import test_sql_injection
-from .xss_tester import test_xss
+import asyncio
+
+from .sqli_tester import SQLITester
+from .xss_tester import AuthBypassTester, XSSTester
 
 
 def run(target, intensity="medium"):
@@ -8,34 +10,31 @@ def run(target, intensity="medium"):
     Runs all web vulnerability tests
     """
 
+    url_target = target if "://" in target else f"http://{target}"
+    config = {
+        "target": {
+            "url": url_target,
+        },
+        "intensity": intensity,
+    }
     findings = []
+    testers = [SQLITester(), XSSTester(), AuthBypassTester()]
 
-    try:
-        # SQL Injection tests
-        sqli_results = test_sql_injection(target)
-        findings.extend(sqli_results)
-
-    except Exception as e:
-        findings.append({
-            "type": "SQL Injection",
-            "severity": "Error",
-            "description": str(e)
-        })
-
-    try:
-        # XSS tests
-        xss_results = test_xss(target)
-        findings.extend(xss_results)
-
-    except Exception as e:
-        findings.append({
-            "type": "XSS",
-            "severity": "Error",
-            "description": str(e)
-        })
+    for tester in testers:
+        try:
+            result = asyncio.run(tester.execute(config))
+            findings.extend(result.get("vulnerabilities", []))
+        except Exception as exc:
+            findings.append(
+                {
+                    "type": tester.name,
+                    "severity": "Low",
+                    "description": str(exc),
+                }
+            )
 
     return {
         "module": "web_security",
-        "target": target,
-        "findings": findings
+        "target": url_target,
+        "findings": findings,
     }

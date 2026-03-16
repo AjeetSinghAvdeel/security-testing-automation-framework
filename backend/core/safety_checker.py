@@ -7,6 +7,14 @@ from __future__ import annotations
 import ipaddress
 from urllib.parse import urlparse
 
+SAFE_HOSTNAMES = {
+    "localhost",
+    "backend",
+    "frontend",
+    "mosquitto",
+    "host.docker.internal",
+}
+
 
 def _extract_host(target: str) -> str:
     value = (target or "").strip()
@@ -26,7 +34,7 @@ def validate_target(target: str) -> bool:
     if not host:
         return False
 
-    if host == "localhost":
+    if host in SAFE_HOSTNAMES:
         return True
 
     try:

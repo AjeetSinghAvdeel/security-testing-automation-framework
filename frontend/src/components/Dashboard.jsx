@@ -4,6 +4,7 @@ import {
   getModules,
   getScanDetails,
   getScanStatus,
+  getTests,
   runScan,
 } from "../services/api";
 import ScanForm from "./ScanForm";
@@ -22,6 +23,7 @@ export default function Dashboard() {
   });
   const [results, setResults] = useState([]);
   const [modules, setModules] = useState([]);
+  const [tests, setTests] = useState([]);
   const [status, setStatus] = useState(initialStatus);
   const [activeTestId, setActiveTestId] = useState("");
   const [isRunning, setIsRunning] = useState(false);
@@ -29,7 +31,12 @@ export default function Dashboard() {
 
   useEffect(() => {
     void loadDashboard();
+    const refreshInterval = window.setInterval(() => {
+      void loadDashboard();
+    }, 5000);
+
     return () => {
+      window.clearInterval(refreshInterval);
       if (pollerRef.current) {
         window.clearInterval(pollerRef.current);
       }
@@ -38,9 +45,10 @@ export default function Dashboard() {
 
   async function loadDashboard() {
     try {
-      const [statsPayload, modulesPayload] = await Promise.all([
+      const [statsPayload, modulesPayload, testsPayload] = await Promise.all([
         getDashboardStats(),
         getModules(),
+        getTests(),
       ]);
 
       setStats({
@@ -49,6 +57,7 @@ export default function Dashboard() {
         highCount: statsPayload.highCount || 0,
       });
       setModules(modulesPayload.modules || []);
+      setTests(testsPayload.tests || []);
     } catch (error) {
       setStatus({
         state: "failed",
@@ -167,6 +176,33 @@ export default function Dashboard() {
                   {module.loaded ? "Loaded" : "Unavailable"}
                 </span>
               </article>
+            ))}
+          </div>
+
+          <div className="panel-divider" />
+
+          <div className="panel-header">
+            <div>
+              <p className="section-label">Recent scans</p>
+              <h2>Persisted history</h2>
+            </div>
+          </div>
+
+          <div className="history-list">
+            {tests.slice(0, 6).map((test) => (
+              <button
+                className="history-card"
+                key={test.test_id}
+                type="button"
+                onClick={() => {
+                  setActiveTestId(test.test_id);
+                  setResults(test.results || []);
+                }}
+              >
+                <strong>{test.target}</strong>
+                <span>{test.status}</span>
+                <small>{test.result_count || 0} findings</small>
+              </button>
             ))}
           </div>
         </section>

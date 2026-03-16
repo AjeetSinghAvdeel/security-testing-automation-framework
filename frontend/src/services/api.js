@@ -1,5 +1,4 @@
-const API_BASE_URL =
-  import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:5000";
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "";
 
 async function request(path, options = {}) {
   const response = await fetch(`${API_BASE_URL}${path}`, options);
@@ -36,4 +35,8 @@ export function getDashboardStats() {
 
 export function getModules() {
   return request("/api/modules");
+}
+
+export function getTests() {
+  return request("/api/tests");
 }

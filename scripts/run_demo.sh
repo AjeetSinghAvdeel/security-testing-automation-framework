@@ -1,57 +1,32 @@
-#!/bin/bash
+#!/usr/bin/env bash
+set -euo pipefail
 
-echo "🚀 IoT & Web Security Testing Framework"
-echo "========================================"
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
-# Colors
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-BLUE='\033[0;34m'
-NC='\033[0m'
+if ! command -v docker >/dev/null 2>&1; then
+    echo "Docker is required to run the integrated stack."
+    exit 1
+fi
 
-# Check prerequisites
-check_prerequisites() {
-    echo -e "${BLUE}Checking prerequisites...${NC}"
-    
-    if ! command -v docker &> /dev/null; then
-        echo -e "${RED}Docker not found. Please install Docker first.${NC}"
-        exit 1
-    fi
-    
-    if ! command -v docker-compose &> /dev/null; then
-        echo -e "${RED}Docker Compose not found. Please install Docker Compose first.${NC}"
-        exit 1
-    fi
-    
-    echo -e "${GREEN}✓ Prerequisites satisfied${NC}"
-}
+if docker compose version >/dev/null 2>&1; then
+    COMPOSE_CMD=(docker compose)
+elif command -v docker-compose >/dev/null 2>&1; then
+    COMPOSE_CMD=(docker-compose)
+else
+    echo "Docker Compose is required to run the integrated stack."
+    exit 1
+fi
 
-# Start Docker services
-start_services() {
-    echo -e "${BLUE}Starting Docker services...${NC}"
-    docker-compose up -d
-    
-    echo "Waiting for services to be ready..."
-    sleep 10
-    
-    echo -e "${GREEN}✓ Docker services started${NC}"
-}
+cd "$ROOT_DIR"
 
-# Main function
-main() {
-    check_prerequisites
-    start_services
-    
-    echo -e "\n${GREEN}✅ Framework is ready!${NC}"
-    echo -e "${YELLOW}Access Points:${NC}"
-    echo "  🌐 Web Interface: http://localhost"
-    echo "  📊 Kibana (SIEM): http://localhost:5601"
-    echo "  ⛓️  Ganache: http://localhost:7545"
-    echo "  📈 Prometheus: http://localhost:9090"
-    echo ""
-    echo -e "Run '${YELLOW}docker-compose logs -f${NC}' to view logs"
-    echo -e "Run '${YELLOW}docker-compose down${NC}' to stop all services"
-}
+echo "Starting the integrated framework with Docker..."
+"${COMPOSE_CMD[@]}" up --build -d
 
-main
+echo
+echo "Framework is starting."
+echo "Frontend: http://localhost:8080"
+echo "Backend API: http://localhost:5000/api/health"
+echo "MQTT Broker: localhost:1883"
+echo
+echo "Follow logs with: ${COMPOSE_CMD[*]} logs -f"
+echo "Stop everything with: ${COMPOSE_CMD[*]} down"
