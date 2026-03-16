@@ -1,80 +1,58 @@
 """
-Module Manager - Loads and manages security testing modules
+Dynamic module loader for framework security modules.
 """
 
-import importlib
-import logging
-from typing import Dict, List
+from __future__ import annotations
 
-logger = logging.getLogger(__name__)
+import importlib
+from typing import Any, Dict, List
 
 
 class ModuleManager:
-
-    def __init__(self):
-        self.module_configs = {
-            'web': {
-                'classes': {
-                    'sqli': {
-                        'path': 'backend.modules.web_security.sqli_tester',
-                        'class': 'SQLITester'
-                    },
-                    'xss': {
-                        'path': 'backend.modules.web_security.xss_tester',
-                        'class': 'XSSTester'
-                    },
-                    'auth': {
-                        'path': 'backend.modules.web_security.xss_tester',
-                        'class': 'AuthBypassTester'
-                    }
-                }
-            },
-            'iot': {
-                'classes': {
-                    'mqtt': {
-                        'path': 'backend.modules.iot_security.mqtt_tester',
-                        'class': 'MQTTTester'
-                    },
-                    'spoofing': {
-                        'path': 'backend.modules.iot_security.mqtt_tester',
-                        'class': 'DeviceSpoofingTester'
-                    },
-                    'coap': {
-                        'path': 'backend.modules.iot_security.mqtt_tester',
-                        'class': 'CoAPTester'
-                    }
-                }
-            }
+    def __init__(self) -> None:
+        self.module_map = {
+            "web_security": [
+                "modules.web_security.web_scanner",
+                "backend.modules.web_security.web_scanner",
+            ],
+            "iam_security": [
+                "modules.iam_security.iam_scanner",
+                "backend.modules.iam_security.iam_scanner",
+            ],
+            "iot_security": [
+                "modules.iot_security.iot_scanner",
+                "backend.modules.iot_security.iot_scanner",
+            ],
         }
 
-    def get_module(self, module_group: str, test_name: str):
+    def _import_first_available(self, import_paths: List[str]) -> Any | None:
+        for import_path in import_paths:
+            try:
+                return importlib.import_module(import_path)
+            except ModuleNotFoundError:
+                continue
+        return None
 
-        if module_group not in self.module_configs:
-            raise ValueError(f"Invalid module group: {module_group}")
+    def load_modules(self) -> List[Any]:
+        loaded_modules: List[Any] = []
+        for import_paths in self.module_map.values():
+            module = self._import_first_available(import_paths)
+            if module is not None:
+                loaded_modules.append(module)
+        return loaded_modules
 
-        module_info = self.module_configs[module_group]["classes"].get(test_name)
-
-        if not module_info:
-            raise ValueError(f"Invalid test type: {test_name}")
-
-        module_path = module_info["path"]
-        class_name = module_info["class"]
-
-        try:
-            module = importlib.import_module(module_path)
-            cls = getattr(module, class_name)
-            return cls()
-        except Exception as e:
-            raise Exception(f"Failed loading {class_name}: {str(e)}")
-
-    def list_modules(self) -> List[Dict]:
-        return [
-            {
-                "group": group,
-                "tests": list(config["classes"].keys())
-            }
-            for group, config in self.module_configs.items()
-        ]
+    def get_loaded_modules(self) -> List[Dict[str, Any]]:
+        modules: List[Dict[str, Any]] = []
+        for name, import_paths in self.module_map.items():
+            module = self._import_first_available(import_paths)
+            modules.append(
+                {
+                    "name": name,
+                    "path": import_paths[0],
+                    "loaded": module is not None,
+                }
+            )
+        return modules
 
 
 module_manager = ModuleManager()

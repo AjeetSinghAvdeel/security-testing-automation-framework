@@ -1,233 +1,104 @@
-// Main Application JavaScript
+const runScanButton = document.getElementById("run-scan-btn");
+const targetInput = document.getElementById("target-input");
+const statusMessage = document.getElementById("status-message");
+const resultsContainer = document.getElementById("results");
+const lastTestId = document.getElementById("last-test-id");
 
-// Global variables
-let socket = null;
-let currentTestId = null;
-
-// Initialize on page load
-document.addEventListener('DOMContentLoaded', function() {
-    initializeWebSocket();
-    loadDashboard();
-    setupEventListeners();
-    startAutoRefresh();
+document.addEventListener("DOMContentLoaded", () => {
+    runScanButton.addEventListener("click", runScan);
+    loadDashboardStats();
 });
 
-// WebSocket connection
-function initializeWebSocket() {
-    socket = io('http://localhost:5000', {
-        reconnection: true,
-        reconnectionDelay: 1000,
-        reconnectionDelayMax: 5000,
-        reconnectionAttempts: 5
-    });
-    
-    socket.on('connect', function() {
-        console.log('Connected to server');
-        updateConnectionStatus(true);
-    });
-    
-    socket.on('test_update', function(data) {
-        handleTestUpdate(data);
-    });
-    
-    socket.on('disconnect', function() {
-        console.log('Disconnected from server');
-        updateConnectionStatus(false);
-    });
-}
-
-// Load dashboard data
-function loadDashboard() {
-    fetch('/api/dashboard/stats')
-        .then(response => response.json())
-        .then(data => {
-            document.getElementById('total-tests').textContent = data.totalTests || 0;
-            document.getElementById('total-vulns').textContent = data.totalVulnerabilities || 0;
-            document.getElementById('critical-count').textContent = data.criticalCount || 0;
-            document.getElementById('blockchain-records').textContent = data.blockchainRecords || 0;
-            document.getElementById('siem-alerts').textContent = data.siemAlerts || 0;
-        })
-        .catch(error => console.error('Error loading dashboard:', error));
-    
-    loadRecentTests();
-}
-
-// Load recent tests
-function loadRecentTests() {
-    fetch('/api/tests/recent')
-        .then(response => response.json())
-        .then(tests => {
-            const tbody = document.getElementById('tests-tbody');
-            tbody.innerHTML = '';
-            
-            tests.slice(0, 10).forEach(test => {
-                const row = document.createElement('tr');
-                row.innerHTML = `
-                    <td><code class="small">${test.test_id}</code></td>
-                    <td>${test.module || 'N/A'}</td>
-                    <td>${test.target || 'N/A'}</td>
-                    <td><span class="badge bg-info">${test.findings || 0}</span></td>
-                    <td><span class="badge bg-${getStatusBadgeColor(test.status)}">${test.status}</span></td>
-                    <td>
-                        <button class="btn btn-sm btn-outline-primary" onclick="viewTestDetails('${test.test_id}')">
-                            <i class="bi bi-eye"></i>
-                        </button>
-                    </td>
-                `;
-                tbody.appendChild(row);
-            });
-        })
-        .catch(error => console.error('Error loading tests:', error));
-}
-
-// Run security module test
-function runModule(module, test) {
-    // Get configuration
-    const target = document.getElementById('target-input').value || 'http://localhost:8080';
-    const intensity = document.getElementById('intensity-select').value;
-    const useBlockchain = document.getElementById('blockchain-check').checked;
-    const useSIEM = document.getElementById('siem-check').checked;
-    
-    // Show loading modal
-    const modal = new bootstrap.Modal(document.getElementById('loading-modal'));
-    modal.show();
-    
-    // Update loading message
-    document.getElementById('loading-message').textContent = 
-        `Running ${module} ${test} test on ${target}...`;
-    
-    // Prepare request
-    const requestData = {
-        module: module,
-        test: test,
-        target: {
-            url: target
-        },
-        intensity: intensity,
-        blockchain: useBlockchain,
-        siem: useSIEM
-    };
-    
-    // Send test request
-    fetch('/api/tests/run', {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(requestData)
-    })
-    .then(response => response.json())
-    .then(data => {
-        currentTestId = data.test_id;
-        monitorTestProgress(data.test_id);
-        showAlert(`Test ${data.test_id} started!`, 'success');
-    })
-    .catch(error => {
-        console.error('Error running test:', error);
-        modal.hide();
-        showAlert('Error running test: ' + error.message, 'danger');
-    });
-}
-
-// Monitor test progress
-function monitorTestProgress(testId) {
-    const checkInterval = setInterval(() => {
-        fetch(`/api/tests/status/${testId}`)
-            .then(response => response.json())
-            .then(data => {
-                if (data.status === 'completed' || data.status === 'failed') {
-                    clearInterval(checkInterval);
-                    handleTestComplete(data);
-                } else {
-                    document.getElementById('loading-message').textContent = 
-                        `Test in progress... Status: ${data.status}`;
-                }
-            })
-            .catch(error => console.error('Error checking status:', error));
-    }, 2000);
-}
-
-// Handle test completion
-function handleTestComplete(data) {
-    // Hide loading modal
-    const modal = bootstrap.Modal.getInstance(document.getElementById('loading-modal'));
-    if (modal) modal.hide();
-    
-    if (data.status === 'completed') {
-        showAlert('Test completed successfully!', 'success');
-        loadDashboard(); // Refresh dashboard
-    } else {
-        showAlert(`Test failed: ${data.error}`, 'danger');
+async function runScan() {
+    const target = targetInput.value.trim();
+    if (!target) {
+        statusMessage.textContent = "Enter a target before running a scan.";
+        return;
     }
-}
 
-// Utility functions
+    setBusy(true);
+    statusMessage.textContent = `Running scan for ${target}...`;
 
-function showAlert(message, type) {
-    const alertDiv = document.createElement('div');
-    alertDiv.className = `alert alert-${type} alert-dismissible fade show position-fixed top-0 end-0 m-3`;
-    alertDiv.style.zIndex = '9999';
-    alertDiv.innerHTML = `
-        ${message}
-        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-    `;
-    document.body.appendChild(alertDiv);
-    
-    setTimeout(() => {
-        alertDiv.remove();
-    }, 5000);
-}
-
-function updateConnectionStatus(connected) {
-    const statusElement = document.getElementById('connection-status');
-    if (connected) {
-        statusElement.className = 'badge bg-success';
-        statusElement.textContent = 'Connected';
-    } else {
-        statusElement.className = 'badge bg-danger';
-        statusElement.textContent = 'Disconnected';
-    }
-}
-
-function getStatusBadgeColor(status) {
-    const colors = {
-        'completed': 'success',
-        'running': 'primary',
-        'queued': 'secondary',
-        'failed': 'danger',
-        'stopped': 'warning'
-    };
-    return colors[status] || 'secondary';
-}
-
-function viewTestDetails(testId) {
-    fetch(`/api/tests/${testId}`)
-        .then(response => response.json())
-        .then(data => {
-            console.log('Test details:', data);
-            showAlert('Test ID: ' + testId, 'info');
-        })
-        .catch(error => console.error('Error fetching test details:', error));
-}
-
-function startAutoRefresh() {
-    // Refresh dashboard every 30 seconds
-    setInterval(() => {
-        loadDashboard();
-    }, 30000);
-}
-
-function setupEventListeners() {
-    // Handle form submit (if needed)
-    const form = document.getElementById('test-config-form');
-    if (form) {
-        form.addEventListener('submit', function(e) {
-            e.preventDefault();
+    try {
+        const response = await fetch("/api/tests/run", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ target }),
         });
+
+        const payload = await response.json();
+        if (!response.ok) {
+            throw new Error(payload.error || "Scan failed");
+        }
+
+        lastTestId.textContent = payload.test_id;
+        renderResults(payload.results || []);
+        statusMessage.textContent = `Scan completed for ${payload.target}.`;
+        await loadDashboardStats();
+    } catch (error) {
+        resultsContainer.classList.add("empty");
+        resultsContainer.innerHTML = `<p>${escapeHtml(error.message)}</p>`;
+        statusMessage.textContent = "Scan failed.";
+    } finally {
+        setBusy(false);
     }
 }
 
-function handleTestUpdate(data) {
-    console.log('Test update:', data);
-    loadDashboard();
+async function loadDashboardStats() {
+    try {
+        const response = await fetch("/api/dashboard/stats");
+        const stats = await response.json();
+
+        document.getElementById("total-tests").textContent = stats.totalTests || 0;
+        document.getElementById("total-vulnerabilities").textContent = stats.totalVulnerabilities || 0;
+        document.getElementById("high-count").textContent = stats.highCount || 0;
+        document.getElementById("medium-count").textContent = stats.mediumCount || 0;
+    } catch (_error) {
+        statusMessage.textContent = "Unable to load dashboard stats.";
+    }
+}
+
+function renderResults(results) {
+    if (!results.length) {
+        resultsContainer.classList.add("empty");
+        resultsContainer.innerHTML = "<p>No vulnerabilities were reported for this target.</p>";
+        return;
+    }
+
+    resultsContainer.classList.remove("empty");
+    resultsContainer.innerHTML = results
+        .filter((result) => result.vulnerability)
+        .map(
+            (result) => `
+                <article class="result-card">
+                    <h3>${escapeHtml(result.vulnerability)}</h3>
+                    <div class="meta">
+                        <span class="tag ${String(result.severity || "").toLowerCase()}">${escapeHtml(result.severity || "Unknown")}</span>
+                        <span class="tag">${escapeHtml(result.module || "unknown")}</span>
+                    </div>
+                </article>
+            `
+        )
+        .join("");
+
+    if (!resultsContainer.innerHTML.trim()) {
+        resultsContainer.classList.add("empty");
+        resultsContainer.innerHTML = "<p>No vulnerabilities were reported for this target.</p>";
+    }
+}
+
+function setBusy(isBusy) {
+    runScanButton.disabled = isBusy;
+    runScanButton.textContent = isBusy ? "Scanning..." : "Run Scan";
+}
+
+function escapeHtml(value) {
+    return String(value)
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#39;");
 }

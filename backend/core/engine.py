@@ -1,114 +1,86 @@
 """
-Core Engine - Orchestrates all framework operations
+Core scan engine for running registered security modules.
 """
 
-import asyncio
-import logging
-from datetime import datetime
-from typing import Dict, List
+from __future__ import annotations
+
+from typing import Any, Dict, List
 import uuid
-import threading
 
-from backend.core.module_manager import module_manager
-from backend.core.result_processor import result_processor
-from backend.blockchain.blockchain_auditor import blockchain_auditor
-from backend.siem.log_generator import log_generator
 
-logger = logging.getLogger(__name__)
+class ScanEngine:
+    """Registers modules and executes them through a common run(target) API."""
 
-class SecurityTestingEngine:
+    def __init__(self) -> None:
+        self.modules: List[Any] = []
+        self.tests: Dict[str, Dict[str, Any]] = {}
 
-    def __init__(self):
-        self.active_tests = {}
-        self.lock = threading.Lock()
+    def register_module(self, module: Any) -> None:
+        if module not in self.modules:
+            self.modules.append(module)
 
-    # =============================
-    # TEST SCHEDULING
-    # =============================
+    def clear_modules(self) -> None:
+        self.modules = []
 
-    def schedule_test(self, test_config: Dict) -> str:
+    def run_scan(self, target: str) -> List[Dict[str, Any]]:
+        findings: List[Dict[str, Any]] = []
 
-        test_id = f"TEST-{uuid.uuid4().hex[:8].upper()}"
+        for module in self.modules:
+            try:
+                result = module.run(target)
+            except Exception as exc:
+                findings.append(
+                    {
+                        "module": getattr(module, "__name__", str(module)).split(".")[-1],
+                        "error": str(exc),
+                    }
+                )
+                continue
 
-        test_record = {
-            'test_id': test_id,
-            'config': test_config,
-            'status': 'running',
-            'created_at': datetime.now().isoformat(),
-            'started_at': datetime.now().isoformat(),
-            'completed_at': None,
-            'results': None,
-            'error': None
+            if not result:
+                continue
+
+            if isinstance(result, list):
+                findings.extend(item for item in result if item)
+            else:
+                findings.append(result)
+
+        return findings
+
+    def create_test(self, target: str, modules: List[Any]) -> Dict[str, Any]:
+        test_id = f"test-{uuid.uuid4().hex[:8]}"
+
+        self.clear_modules()
+        for module in modules:
+            self.register_module(module)
+
+        findings = self.run_scan(target)
+        record = {
+            "test_id": test_id,
+            "target": target,
+            "status": "completed",
+            "results": findings,
+            "result_count": len(findings),
+        }
+        self.tests[test_id] = record
+        return record
+
+    def get_test(self, test_id: str) -> Dict[str, Any] | None:
+        return self.tests.get(test_id)
+
+    def get_test_status(self, test_id: str) -> Dict[str, Any] | None:
+        test = self.get_test(test_id)
+        if not test:
+            return None
+        return {
+            "test_id": test["test_id"],
+            "status": test["status"],
+            "target": test["target"],
+            "result_count": test["result_count"],
         }
 
-        self.active_tests[test_id] = test_record
+    def get_all_tests(self) -> List[Dict[str, Any]]:
+        return list(self.tests.values())
 
-        # Run test in background thread
-        thread = threading.Thread(
-            target=self._execute_test,
-            args=(test_id, test_config)
-        )
-        thread.start()
 
-        return test_id
-
-    # =============================
-    # EXECUTION PIPELINE
-    # =============================
-
-    def _execute_test(self, test_id: str, config: Dict):
-
-        try:
-            module_group = config.get("module")
-            test_name = config.get("test")
-
-            module_instance = module_manager.get_module(module_group, test_name)
-
-            raw_results = asyncio.run(
-                module_instance.execute(config)
-            )
-
-            raw_results["test_id"] = test_id
-            raw_results["total_tests"] = len(raw_results.get("tests", []))
-
-            processed_results = result_processor.process(raw_results)
-
-            # Blockchain integration
-            if config.get("blockchain", True):
-                evidence_hash = blockchain_auditor.hash_evidence(processed_results)
-
-                tx_hash = blockchain_auditor.store_hash(
-                    evidence_hash,
-                    attack_type=test_name,
-                    target_info=str(config.get("target"))
-                )
-
-                processed_results["blockchain_tx"] = tx_hash
-
-            # SIEM integration
-            if config.get("siem", True):
-                log_generator.generate_security_log(processed_results)
-
-            with self.lock:
-                self.active_tests[test_id]["status"] = "completed"
-                self.active_tests[test_id]["completed_at"] = datetime.now().isoformat()
-                self.active_tests[test_id]["results"] = processed_results
-
-        except Exception as e:
-            logger.error(f"Test execution failed: {str(e)}")
-
-            with self.lock:
-                self.active_tests[test_id]["status"] = "failed"
-                self.active_tests[test_id]["error"] = str(e)
-
-    # =============================
-    # STATUS METHODS
-    # =============================
-
-    def get_test_status(self, test_id: str) -> Dict:
-        return self.active_tests.get(test_id)
-
-    def get_all_tests(self) -> List[Dict]:
-        return list(self.active_tests.values())
-
-engine = SecurityTestingEngine()
+engine = ScanEngine()
