@@ -1,58 +1,111 @@
-"""IAM Security Module - Credential Stuffing Tester"""
-
-import logging
+import requests
 import time
-from typing import Dict
 
-logger = logging.getLogger(__name__)
+USERNAMES = ["admin", "user", "test"]
+PASSWORDS = ["admin", "password", "123456", "admin123"]
 
-class CredentialStuffingTester:
-    """Credential stuffing testing module"""
-    
-    def __init__(self):
-        self.name = "Credential Stuffing Tester"
-        self.version = "1.0.0"
-        self.mitre_id = "T1110.001"
-    
-    async def execute(self, config: Dict) -> Dict:
-        """Execute credential stuffing tests"""
-        return {
-            'module': 'credential_stuffing',
-            'target': config.get('target', {}).get('url'),
-            'vulnerabilities': [],
-            'timestamp': time.time()
-        }
 
-class JWTTester:
-    """JWT vulnerability testing module"""
-    
-    def __init__(self):
-        self.name = "JWT Tester"
-        self.version = "1.0.0"
-        self.mitre_id = "T1110.004"
-    
-    async def execute(self, config: Dict) -> Dict:
-        """Execute JWT tests"""
-        return {
-            'module': 'jwt',
-            'target': config.get('target', {}).get('url'),
-            'vulnerabilities': [],
-            'timestamp': time.time()
-        }
+def test_credentials(target):
+    """
+    Attempt common credential combinations
+    """
 
-class RBACTester:
-    """RBAC testing module"""
-    
-    def __init__(self):
-        self.name = "RBAC Tester"
-        self.version = "1.0.0"
-        self.mitre_id = "T1078.001"
-    
-    async def execute(self, config: Dict) -> Dict:
-        """Execute RBAC tests"""
-        return {
-            'module': 'rbac',
-            'target': config.get('target', {}).get('url'),
-            'vulnerabilities': [],
-            'timestamp': time.time()
-        }
+    results = []
+
+    for username in USERNAMES:
+        for password in PASSWORDS:
+
+            try:
+                response = requests.post(
+                    f"{target}/login",
+                    json={
+                        "username": username,
+                        "password": password
+                    },
+                    timeout=3
+                )
+
+                if response.status_code == 200:
+                    results.append({
+                        "type": "Credential Stuffing",
+                        "severity": "High",
+                        "risk_score": 8.0,
+                        "username": username,
+                        "password": password,
+                        "description": "Application accepted common credential"
+                    })
+
+            except Exception:
+                pass
+
+            time.sleep(0.3)
+
+    return results
+
+
+def test_bruteforce_protection(target):
+    """
+    Detect if login endpoint blocks repeated attempts
+    """
+
+    results = []
+    blocked = False
+
+    try:
+        for _ in range(10):
+
+            response = requests.post(
+                f"{target}/login",
+                json={
+                    "username": "admin",
+                    "password": "wrongpassword"
+                },
+                timeout=3
+            )
+
+            if response.status_code == 429:
+                blocked = True
+
+        if not blocked:
+            results.append({
+                "type": "Missing Brute-force Protection",
+                "severity": "High",
+                "risk_score": 7.5,
+                "description": "Login endpoint does not rate-limit repeated attempts"
+            })
+
+    except Exception:
+        pass
+
+    return results
+
+
+def test_password_policy(target):
+    """
+    Check if system accepts extremely weak passwords
+    """
+
+    results = []
+
+    try:
+        response = requests.post(
+            f"{target}/register",
+            json={
+                "username": "weaktestuser",
+                "password": "123"
+            },
+            timeout=3
+        )
+
+        if response.status_code == 200:
+            results.append({
+                "type": "Weak Password Policy",
+                "severity": "Medium",
+                "risk_score": 5.5,
+                "description": "Application accepted a very weak password"
+            })
+
+    except Exception:
+        pass
+
+    return results
