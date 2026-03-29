@@ -112,7 +112,7 @@ export default function Dashboard() {
     }
   }
 
-  async function handleRunScan(target) {
+  async function handleRunScan({ target, attackProfile, attackLabel }) {
     if (!target.trim()) {
       setStatus({
         state: "failed",
@@ -126,13 +126,13 @@ export default function Dashboard() {
     setActiveScan(null);
     setStatus({
       state: "running",
-      message: `Running scan against ${target}...`,
+      message: `Performing ${attackLabel} against ${target}...`,
     });
 
     try {
-      const scan = await runScan(token, target.trim());
+      const scan = await runScan(token, target.trim(), attackProfile);
       setActiveTestId(scan.test_id);
-      startPolling(scan.test_id, target.trim());
+      startPolling(scan.test_id, target.trim(), attackLabel);
     } catch (error) {
       setIsRunning(false);
       setStatus({
@@ -142,7 +142,7 @@ export default function Dashboard() {
     }
   }
 
-  function startPolling(testId, target) {
+  function startPolling(testId, target, attackLabel) {
     if (pollerRef.current) {
       window.clearInterval(pollerRef.current);
     }
@@ -158,9 +158,16 @@ export default function Dashboard() {
           setResults(details.results || []);
           setActiveScan(details);
           setIsRunning(false);
+          const actionCount = details.lab_actions?.length || 0;
+          const authenticatedActions = (details.lab_actions || []).filter(
+            (action) => action.outcome === "authenticated" || action.outcome === "authorized",
+          ).length;
           setStatus({
             state: "completed",
-            message: `Completed scan for ${target}.`,
+            message:
+              actionCount > 0
+                ? `Completed ${attackLabel} for ${target}. ${actionCount} lab actions recorded${authenticatedActions ? `, ${authenticatedActions} reached authenticated features` : ""}.`
+                : `Completed ${attackLabel} for ${target}.`,
           });
           await loadDashboard();
         } else if (scanStatus.status === "failed") {
@@ -175,7 +182,7 @@ export default function Dashboard() {
         } else {
           setStatus({
             state: "running",
-            message: `Running scan for ${target}. Status: ${scanStatus.status}`,
+            message: `Performing ${attackLabel} for ${target}. Status: ${scanStatus.status}`,
           });
         }
       } catch (error) {
@@ -258,34 +265,14 @@ export default function Dashboard() {
             </div>
           </div>
 
-          <div className="history-list">
-            {tests.slice(0, 6).map((test) => (
-              <details className="history-card" key={test.test_id}>
-                <summary>
-                  <div className="history-summary">
-                    <strong>{test.target}</strong>
-                    <span>{test.status}</span>
-                    <small>{test.result_count || 0} findings</small>
-                  </div>
-                </summary>
-                <div className="history-details">
-                  <p>Test ID: {test.test_id}</p>
-                  {test.blockchain_tx ? <p>Blockchain TX: {test.blockchain_tx}</p> : null}
-                  <button
-                    className="inline-action"
-                    type="button"
-                    onClick={() => {
-                      setActiveTestId(test.test_id);
-                      setResults(test.results || []);
-                      setActiveScan(test);
-                    }}
-                  >
-                    View scan details
-                  </button>
-                </div>
-              </details>
-            ))}
-          </div>
+          <AnimatedHistoryList
+            items={tests.slice(0, 10)}
+            onSelect={(test) => {
+              setActiveTestId(test.test_id);
+              setResults(test.results || []);
+              setActiveScan(test);
+            }}
+          />
         </section>
       </section>
     </main>
@@ -299,4 +286,60 @@ function StatCard({ label, value, accent = "blue" }) {
       <strong>{value}</strong>
     </article>
   );
+}
+
+function AnimatedHistoryList({ items, onSelect }) {
+  const listRef = useRef(null);
+  const [topFade, setTopFade] = useState(0);
+  const [bottomFade, setBottomFade] = useState(items.length > 4 ? 1 : 0);
+
+  useEffect(() => {
+    const node = listRef.current;
+    if (!node) {
+      return;
+    }
+
+    const hasOverflow = node.scrollHeight > node.clientHeight + 2;
+    setBottomFade(hasOverflow ? 1 : 0);
+    setTopFade(0);
+  }, [items]);
+
+  function handleScroll(event) {
+    const node = event.currentTarget;
+    const { scrollTop, scrollHeight, clientHeight } = node;
+    setTopFade(Math.min(scrollTop / 50, 1));
+    const remaining = scrollHeight - (scrollTop + clientHeight);
+    setBottomFade(scrollHeight <= clientHeight ? 0 : Math.min(remaining / 50, 1));
+  }
+
+  return (
+    <div className="history-scroll-shell">
+      <div className="history-scroll-list" ref={listRef} onScroll={handleScroll}>
+        {items.map((test, index) => (
+          <button
+            className="history-scroll-item"
+            key={test.test_id}
+            type="button"
+            onClick={() => onSelect(test)}
+            style={{ animationDelay: `${index * 60}ms` }}
+          >
+            <div className="history-scroll-row">
+              <strong>{test.target}</strong>
+              <span>{formatAttackLabel(test.attack_profile)}</span>
+            </div>
+            <div className="history-scroll-row history-scroll-row-muted">
+              <span>{test.status}</span>
+              <span>{test.result_count || 0} findings</span>
+            </div>
+          </button>
+        ))}
+      </div>
+      <div className="history-fade history-fade-top" style={{ opacity: topFade }} />
+      <div className="history-fade history-fade-bottom" style={{ opacity: bottomFade }} />
+    </div>
+  );
+}
+
+function formatAttackLabel(value) {
+  return value ? value.replaceAll("_", " ") : "attack";
 }

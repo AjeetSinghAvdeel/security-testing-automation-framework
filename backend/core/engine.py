@@ -22,6 +22,7 @@ class ScanEngine:
         self._lock = threading.Lock()
         self._store = None
         self._siem_service = SIEMService()
+        self._scan_options: Dict[str, Any] = {}
 
     def register_module(self, module: Any) -> None:
         if module not in self.modules:
@@ -33,13 +34,23 @@ class ScanEngine:
     def set_store(self, store: Any) -> None:
         self._store = store
 
-    def run_scan(self, target: str) -> List[Dict[str, Any]]:
+    def run_scan(
+        self, target: str, scan_options: Dict[str, Any] | None = None
+    ) -> tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
         findings: List[Dict[str, Any]] = []
+        actions: List[Dict[str, Any]] = []
+        effective_options = scan_options or {}
 
         for module in self.modules:
             module_name = getattr(module, "__name__", str(module)).split(".")[-1]
             try:
-                result = module.run(target)
+                try:
+                    result = module.run(target, scan_options=effective_options)
+                except TypeError:
+                    if module_name == "iam_scanner" and effective_options.get("jwt_token"):
+                        result = module.run(target, token=effective_options.get("jwt_token"))
+                    else:
+                        result = module.run(target)
             except Exception as exc:
                 error_finding = self._normalize_finding(
                     {
@@ -57,13 +68,22 @@ class ScanEngine:
             if not result:
                 continue
 
+            if isinstance(result, dict) and isinstance(result.get("actions"), list):
+                actions.extend(result["actions"])
+
             findings.extend(
                 self._extract_findings(result=result, module_name=module_name, target=target)
             )
 
-        return findings
+        return findings, actions
 
-    def create_test(self, target: str, modules: List[Any], user: Dict[str, Any]) -> Dict[str, Any]:
+    def create_test(
+        self,
+        target: str,
+        modules: List[Any],
+        user: Dict[str, Any],
+        scan_options: Dict[str, Any] | None = None,
+    ) -> Dict[str, Any]:
         test_id = f"test-{uuid.uuid4().hex[:8]}"
 
         self.clear_modules()
@@ -73,6 +93,7 @@ class ScanEngine:
         record = {
             "test_id": test_id,
             "target": target,
+            "attack_profile": (scan_options or {}).get("attack_profile", "full_assessment"),
             "status": "running",
             "results": [],
             "result_count": 0,
@@ -85,6 +106,7 @@ class ScanEngine:
         }
         with self._lock:
             self.tests[test_id] = record
+            self._scan_options[test_id] = dict(scan_options or {})
 
         self._persist(record)
 
@@ -121,11 +143,14 @@ class ScanEngine:
 
     def _execute_test(self, test_id: str, target: str) -> None:
         try:
-            findings = self.run_scan(target)
+            with self._lock:
+                scan_options = dict(self._scan_options.get(test_id, {}))
+            findings, actions = self.run_scan(target, scan_options=scan_options)
             with self._lock:
                 record = self.tests[test_id]
                 record["status"] = "completed"
                 record["results"] = findings
+                record["lab_actions"] = actions
                 record["result_count"] = len(findings)
                 record["completed_at"] = datetime.utcnow().isoformat()
                 record["module"] = "multi_module"
@@ -146,6 +171,8 @@ class ScanEngine:
                 record["error"] = str(exc)
                 record["completed_at"] = datetime.utcnow().isoformat()
         self._persist(self.tests[test_id])
+        with self._lock:
+            self._scan_options.pop(test_id, None)
 
     def _persist(self, record: Dict[str, Any]) -> None:
         if self._store is None:

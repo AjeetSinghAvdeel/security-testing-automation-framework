@@ -1,5 +1,3 @@
-import VulnerabilityCard from "./VulnerabilityCard";
-
 export default function ScanResults({ results, activeTestId, activeScan }) {
   const highRiskCount = results.filter(
     (item) => item.severity === "Critical" || item.severity === "High",
@@ -11,6 +9,9 @@ export default function ScanResults({ results, activeTestId, activeScan }) {
   const complianceMappings = siemPayload?.compliance || [];
   const reportSummary = siemPayload?.report || null;
   const siemLogs = siemPayload?.logs || [];
+  const groupedFindings = aggregateFindings(results);
+  const labActions = activeScan?.lab_actions || [];
+  const actionSummary = summarizeLabActions(labActions);
 
   return (
     <section className="panel">
@@ -57,6 +58,39 @@ export default function ScanResults({ results, activeTestId, activeScan }) {
           </summary>
 
           <div className="scan-result-details">
+            {labActions.length ? (
+              <div className="actions-panel">
+                <div className="actions-panel-header">
+                  <div>
+                    <p className="vuln-eyebrow">Actions Performed</p>
+                    <h3>{actionSummary.title}</h3>
+                  </div>
+                  <span className="scan-result-badge">{actionSummary.subtitle}</span>
+                </div>
+
+                <div className="actions-list">
+                  {labActions.map((action, index) => (
+                    <article
+                      className="action-row"
+                      key={`${action.timestamp || action.endpoint}-${index}`}
+                    >
+                      <div className="action-row-main">
+                        <strong>{action.summary || action.action || "Lab action"}</strong>
+                        <span>{action.endpoint || "Unknown endpoint"}</span>
+                      </div>
+                      <div className="action-row-meta">
+                        <span>{action.method || "GET"}</span>
+                        <span className={`action-outcome action-outcome-${action.outcome || "completed"}`}>
+                          {(action.outcome || "completed").replaceAll("_", " ")}
+                        </span>
+                        {action.status_code ? <span>HTTP {action.status_code}</span> : null}
+                      </div>
+                    </article>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+
             {siemPayload ? (
               <div className="analysis-grid">
                 <article className="analysis-card">
@@ -133,12 +167,33 @@ export default function ScanResults({ results, activeTestId, activeScan }) {
               </div>
             ) : null}
 
-            <div className="results-grid">
-              {results.map((item, index) => (
-                <VulnerabilityCard
-                  key={`${item.vulnerability || "result"}-${index}`}
-                  item={item}
-                />
+            <div className="findings-list">
+              {groupedFindings.map((item, index) => (
+                <article className="finding-row" key={`${item.vulnerability}-${item.module}-${index}`}>
+                  <div className="finding-main">
+                    <div className="finding-title-row">
+                      <p className="vuln-eyebrow">Detected Issue</p>
+                      <span className={`severity-pill ${severityClass(item.severity)}`}>
+                        {item.severity || "Unknown"}
+                      </span>
+                    </div>
+                    <h3>{item.vulnerability || "Unnamed Finding"}</h3>
+                    <p className="finding-description">
+                      {item.description || "No additional description was returned by the API."}
+                    </p>
+                  </div>
+
+                  <div className="finding-meta">
+                    <span>Module: {item.module || "Unknown"}</span>
+                    <span>Target: {item.target || "Not provided"}</span>
+                    <span>Occurrences: {item.count}</span>
+                    <span>
+                      {item.confidence
+                        ? `Confidence ${Math.round(item.confidence * 100)}%`
+                        : "Requires analyst review"}
+                    </span>
+                  </div>
+                </article>
               ))}
             </div>
           </div>
@@ -146,4 +201,68 @@ export default function ScanResults({ results, activeTestId, activeScan }) {
       )}
     </section>
   );
+}
+
+function aggregateFindings(results) {
+  const groups = new Map();
+
+  for (const item of results) {
+    const key = [
+      item.vulnerability || "",
+      item.severity || "",
+      item.module || "",
+      item.description || "",
+      item.target || "",
+    ].join("::");
+
+    if (!groups.has(key)) {
+      groups.set(key, {
+        ...item,
+        count: 0,
+      });
+    }
+
+    const group = groups.get(key);
+    group.count += 1;
+    if (!group.confidence && item.confidence) {
+      group.confidence = item.confidence;
+    }
+  }
+
+  return Array.from(groups.values()).sort((left, right) => {
+    const severityOrder = { Critical: 4, High: 3, Medium: 2, Low: 1 };
+    const severityDelta =
+      (severityOrder[right.severity] || 0) - (severityOrder[left.severity] || 0);
+    if (severityDelta !== 0) {
+      return severityDelta;
+    }
+    return right.count - left.count;
+  });
+}
+
+function severityClass(severity) {
+  if (severity === "Critical" || severity === "High") {
+    return "severity-high";
+  }
+  if (severity === "Medium") {
+    return "severity-medium";
+  }
+  return "severity-low";
+}
+
+function summarizeLabActions(actions) {
+  const authenticated = actions.filter((action) => action.outcome === "authenticated").length;
+  const authorized = actions.filter((action) => action.outcome === "authorized").length;
+
+  if (authenticated || authorized) {
+    return {
+      title: "Local-lab interaction completed with authenticated follow-through.",
+      subtitle: `${actions.length} recorded actions`,
+    };
+  }
+
+  return {
+    title: "Local-lab interaction trace captured for this scan.",
+    subtitle: `${actions.length} recorded actions`,
+  };
 }

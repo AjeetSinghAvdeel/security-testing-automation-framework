@@ -20,6 +20,94 @@ app = Flask(__name__)
 CORS(app)
 engine.set_store(firebase_store)
 
+ATTACK_PROFILES = {
+    "full_assessment": {
+        "modules": ["web_security", "iam_security", "iot_security"],
+        "tests": [],
+        "attack_type": "full_assessment",
+    },
+    "credential_stuffing": {
+        "modules": ["iam_security"],
+        "tests": ["credential_stuffing"],
+        "attack_type": "credential_stuffing",
+    },
+    "password_strength": {
+        "modules": ["iam_security"],
+        "tests": ["credential_stuffing"],
+        "attack_type": "password_strength",
+    },
+    "exposed_credentials": {
+        "modules": ["iam_security"],
+        "tests": ["credential_stuffing"],
+        "attack_type": "exposed_credentials",
+    },
+    "login_mc_safesearch": {
+        "modules": ["iam_security"],
+        "tests": ["credential_stuffing"],
+        "attack_type": "login_mc_safesearch",
+    },
+    "bruteforce": {
+        "modules": ["iam_security"],
+        "tests": ["bruteforce"],
+        "attack_type": "bruteforce",
+    },
+    "login_admin_sqli": {
+        "modules": ["web_security"],
+        "tests": ["sqli"],
+        "attack_type": "login_admin_sqli",
+    },
+    "union_search_injection": {
+        "modules": ["web_security"],
+        "tests": ["sqli"],
+        "attack_type": "union_search_injection",
+    },
+    "reflected_xss": {
+        "modules": ["web_security"],
+        "tests": ["xss"],
+        "attack_type": "reflected_xss",
+    },
+    "admin_section": {
+        "modules": ["iam_security"],
+        "tests": ["rbac"],
+        "attack_type": "admin_section",
+    },
+    "view_basket": {
+        "modules": ["iam_security"],
+        "tests": ["rbac"],
+        "attack_type": "view_basket",
+    },
+    "application_configuration": {
+        "modules": ["web_security"],
+        "tests": ["auth_bypass"],
+        "attack_type": "application_configuration",
+    },
+    "empty_user_registration": {
+        "modules": ["iam_security"],
+        "tests": ["registration_validation"],
+        "attack_type": "empty_user_registration",
+    },
+    "exposed_metrics": {
+        "modules": ["web_security"],
+        "tests": ["observability"],
+        "attack_type": "exposed_metrics",
+    },
+    "session_authz": {
+        "modules": ["iam_security"],
+        "tests": ["rbac", "session"],
+        "attack_type": "session_authz",
+    },
+    "web_inputs": {
+        "modules": ["web_security"],
+        "tests": ["sqli", "xss", "auth_bypass", "observability"],
+        "attack_type": "web_inputs",
+    },
+    "iot_protocols": {
+        "modules": ["iot_security"],
+        "tests": [],
+        "attack_type": "iot_protocols",
+    },
+}
+
 
 def require_user(handler):
     @wraps(handler)
@@ -58,15 +146,30 @@ def health_check():
 def run_test(user):
     payload = request.get_json(silent=True) or {}
     target = (payload.get("target") or "").strip()
+    attack_profile = (payload.get("attackProfile") or "full_assessment").strip()
+    profile_config = ATTACK_PROFILES.get(attack_profile)
 
     if not target:
         return jsonify({"error": "Target is required"}), 400
 
+    if profile_config is None:
+        return jsonify({"error": "Unknown attack profile"}), 400
+
     if not validate_target(target):
         return jsonify({"error": "Unsafe target blocked by safety checker"}), 400
 
-    modules = module_manager.load_modules()
-    test = engine.create_test(target, modules, user)
+    modules = module_manager.load_modules(profile=attack_profile)
+    test = engine.create_test(
+        target,
+        modules,
+        user,
+        scan_options={
+            "attack_profile": attack_profile,
+            "tests": profile_config["tests"],
+            "attack_type": profile_config["attack_type"],
+            "jwt_token": (payload.get("jwtToken") or "").strip() or None,
+        },
+    )
     return jsonify(test), 202
 
 

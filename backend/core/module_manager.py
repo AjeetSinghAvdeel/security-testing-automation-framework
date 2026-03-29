@@ -24,6 +24,25 @@ class ModuleManager:
                 "backend.modules.iot_security.iot_scanner",
             ],
         }
+        self.profile_map = {
+            "full_assessment": ["web_security", "iam_security", "iot_security"],
+            "web_inputs": ["web_security"],
+            "credential_stuffing": ["iam_security"],
+            "password_strength": ["iam_security"],
+            "exposed_credentials": ["iam_security"],
+            "login_mc_safesearch": ["iam_security"],
+            "bruteforce": ["iam_security"],
+            "login_admin_sqli": ["web_security"],
+            "union_search_injection": ["web_security"],
+            "reflected_xss": ["web_security"],
+            "admin_section": ["iam_security"],
+            "view_basket": ["iam_security"],
+            "application_configuration": ["web_security"],
+            "empty_user_registration": ["iam_security"],
+            "exposed_metrics": ["web_security"],
+            "session_authz": ["iam_security"],
+            "iot_protocols": ["iot_security"],
+        }
 
     def _import_first_available(self, import_paths: List[str]) -> Any | None:
         for import_path in import_paths:
@@ -33,9 +52,11 @@ class ModuleManager:
                 continue
         return None
 
-    def load_modules(self) -> List[Any]:
+    def load_modules(self, profile: str = "full_assessment") -> List[Any]:
         loaded_modules: List[Any] = []
-        for import_paths in self.module_map.values():
+        module_names = self.profile_map.get(profile, self.profile_map["full_assessment"])
+        for module_name in module_names:
+            import_paths = self.module_map.get(module_name, [])
             module = self._import_first_available(import_paths)
             if module is not None:
                 loaded_modules.append(module)

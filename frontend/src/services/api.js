@@ -47,10 +47,10 @@ async function request(path, token, options = {}) {
   return payload;
 }
 
-export function runScan(token, target) {
+export function runScan(token, target, attackProfile) {
   return request("/api/tests/run", token, {
     method: "POST",
-    body: JSON.stringify({ target }),
+    body: JSON.stringify({ target, attackProfile }),
   });
 }
 
